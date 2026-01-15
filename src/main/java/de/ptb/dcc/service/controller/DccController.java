@@ -76,6 +76,39 @@ public class DccController {
     }
 
     /**
+     * Mock endpoint for /me to provide user info and XSRF token.
+     */
+    @GetMapping("/me")
+    public Map<String, Object> getMe() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("name", "Mock User");
+        response.put("loginUrl", "/login");
+        response.put("logoutUrl", "/logout");
+        response.put("xsrfToken", "mock-token-123456789");
+        response.put("principal", new HashMap<>());
+        return response;
+    }
+
+    /**
+     * Endpoint to verify the XSRF token.
+     * Prints the token to the console if it exists.
+     */
+    @GetMapping("/verify-token")
+    public Map<String, Object> verifyToken(@RequestHeader(value = "X-XSRF-TOKEN", required = false) String token) {
+        if (token != null) {
+            System.out.println("[DccController] Received X-XSRF-TOKEN: " + token);
+        } else {
+            System.out.println("[DccController] No X-XSRF-TOKEN found in request");
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "checked");
+        response.put("tokenFound", token != null);
+        response.put("token", token);
+        return response;
+    }
+
+    /**
      * Helper to create the nested name structure required by the DCC DTO
      */
     private Map<String, Object> createMockName(String text) {
