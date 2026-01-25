@@ -1,9 +1,11 @@
 package de.ptb.dcc.services;
 
+import de.ptb.dcc.dtos.DccValidationResultDto;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.MeasurementUnit;
 import de.ptb.dcc.repositories.DccRepository;
 import de.ptb.dcc.repositories.MeasurementUnitRepository;
+import de.ptb.dcc.utils.SigningUtils;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -12,9 +14,21 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.security.PrivateKey;
+import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -24,15 +38,18 @@ public class DccService {
 
     private final DccRepository dccRepository;
     private final MeasurementUnitRepository muRepository;
+    private final DccSigningService signingService;
+    private final RestTemplate restTemplate = new RestTemplate();
 
-    public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository) {
+    public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository, DccSigningService signingService) {
         this.dccRepository = dccRepository;
         this.muRepository = muRepository;
+        this.signingService = signingService;
     }
 
-    public Page<Dcc> listDccs(String muId, Boolean template, OffsetDateTime createdFrom, OffsetDateTime createdTo, 
-                             String orderBy, String orderDir, int limit, int offset) {
-        
+    public Page<Dcc> listDccs(String muId, Boolean template, OffsetDateTime createdFrom, OffsetDateTime createdTo,
+            String orderBy, String orderDir, int limit, int offset) {
+
         Sort sort = Sort.by(Sort.Direction.fromString(orderDir), orderBy);
         Pageable pageable = PageRequest.of(offset / limit, limit, sort);
 
@@ -112,22 +129,49 @@ public class DccService {
     @Transactional
     public Optional<Dcc> updateDcc(Long dccId, String name, String dccJson) {
         return dccRepository.findById(dccId).map(dcc -> {
-            if (name != null) dcc.setName(name);
-            if (dccJson != null) dcc.setDccJson(dccJson);
+            if (name != null)
+                dcc.setName(name);
+            if (dccJson != null)
+                dcc.setDccJson(dccJson);
             return dccRepository.save(dcc);
         });
     }
 
     @Transactional
     public Dcc validateDcc(Long dccId, String fileType) {
-        return dccRepository.findById(dccId).map(dcc -> {
-            if ("PDF".equalsIgnoreCase(fileType)) {
-                dcc.setPdfValid(true);
-            } else if ("XML".equalsIgnoreCase(fileType)) {
-                dcc.setXmlValid(true);
-            }
-            return dccRepository.save(dcc);
-        }).orElseThrow(() -> new RuntimeException("DCC not found"));
+        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
+
+        try {
+            System.out.println("=== Starting Validation Chain for DCC ID: " + dccId + " ===");
+
+            // 1. Conversion
+            System.out.println("Converting JSON to XML/PDF via localhost:10001...");
+            String xmlContent = convertToXml(dcc.getDccJson());
+            byte[] pdfContent = convertToPdf(dcc.getDccJson());
+
+            // 2. Signing and Verification (moved to dedicated service)
+            return signingService.performSigningAndVerification(dcc, xmlContent, pdfContent);
+
+        } catch (Exception e) {
+            System.err.println("[ERROR] Validation chain failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return dccRepository.save(dcc);
+    }
+
+    private String convertToXml(String dccJson) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
+        return restTemplate.postForObject("http://localhost:10001/api/v1/dcc/xsd/dcc/xml", entity, String.class);
+    }
+
+    private byte[] convertToPdf(String dccJson) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
+        return restTemplate.postForObject("http://localhost:10001/api/v1/dcc/xsd/dcc/pdf", entity, byte[].class);
     }
 
     @Transactional
@@ -142,7 +186,7 @@ public class DccService {
     public Dcc publishDcc(Long dccId) {
         return dccRepository.findById(dccId).map(dcc -> {
             dcc.setPublishedAt(OffsetDateTime.now());
-            
+
             if (dcc.getMu() != null) {
                 List<Dcc> previousDccs = dccRepository.findByMuAndPublishedAtIsNotNull(dcc.getMu());
                 for (Dcc prev : previousDccs) {
@@ -152,7 +196,7 @@ public class DccService {
                     }
                 }
             }
-            
+
             return dccRepository.save(dcc);
         }).orElseThrow(() -> new RuntimeException("DCC not found"));
     }
@@ -160,5 +204,75 @@ public class DccService {
     @Transactional
     public void deleteDcc(Long dccId) {
         dccRepository.deleteById(dccId);
+    }
+
+    public DccValidationResultDto validateExternalXml(MultipartFile file) throws IOException {
+        File tempFile = File.createTempFile("ext-dcc-", ".xml");
+        try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+            fos.write(file.getBytes());
+        }
+        
+        DccValidationResultDto result = SigningUtils.validateExternalXml(tempFile);
+        tempFile.delete();
+        
+        // For now, return empty matching DCCs as we don't store hashes in DB
+        result.setMatchingDccs(Collections.emptyList());
+        return result;
+    }
+
+    public DccValidationResultDto validateExternalPdf(MultipartFile file) throws IOException {
+        File tempFile = File.createTempFile("ext-dcc-", ".pdf");
+        try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+            fos.write(file.getBytes());
+        }
+        
+        DccValidationResultDto result = SigningUtils.validateExternalPdf(tempFile);
+        tempFile.delete();
+        
+        // For now, return empty matching DCCs
+        result.setMatchingDccs(Collections.emptyList());
+        return result;
+    }
+
+    public byte[] getSignedXml(Long dccId) throws Exception {
+        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
+        String xmlContent = convertToXml(dcc.getDccJson());
+        
+        File tempXml = File.createTempFile("dcc-download-", ".xml");
+        File signedXml = File.createTempFile("dcc-signed-download-", ".xml");
+        try {
+            Files.writeString(tempXml.toPath(), xmlContent);
+            
+            PrivateKey privateKey = SigningUtils.loadPrivateKey();
+            X509Certificate cert = SigningUtils.loadCertificate();
+            
+            SigningUtils.signXml(tempXml, signedXml, privateKey, cert);
+            
+            return Files.readAllBytes(signedXml.toPath());
+        } finally {
+            tempXml.delete();
+            signedXml.delete();
+        }
+    }
+
+    public byte[] getSignedPdf(Long dccId) throws Exception {
+        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
+        byte[] pdfContent = convertToPdf(dcc.getDccJson());
+        
+        File tempPdf = File.createTempFile("dcc-download-", ".pdf");
+        File signedPdf = File.createTempFile("dcc-signed-download-", ".pdf");
+        try {
+            Files.write(tempPdf.toPath(), pdfContent);
+            
+            PrivateKey privateKey = SigningUtils.loadPrivateKey();
+            X509Certificate cert = SigningUtils.loadCertificate();
+            
+            SigningUtils.signPdf(tempPdf.getAbsolutePath(), signedPdf.getAbsolutePath(), privateKey, cert);
+            
+            return Files.readAllBytes(signedPdf.toPath());
+        } finally {
+            tempPdf.delete();
+            signedPdf.delete();
+        }
     }
 }

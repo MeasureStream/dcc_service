@@ -1,1 +1,6 @@
+sign_xml.class
 de\ptb\dcc\DccServiceApplication.class
+test_keys.class
+sign_pdf.class
+test_java_signing.class
+verify_xml.class

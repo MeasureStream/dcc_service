@@ -1,9 +1,6 @@
 package de.ptb.dcc.controllers;
 
-import de.ptb.dcc.dtos.DccCreateRequest;
-import de.ptb.dcc.dtos.DccDto;
-import de.ptb.dcc.dtos.DccUpdateRequest;
-import de.ptb.dcc.dtos.MeasurementUnitDto;
+import de.ptb.dcc.dtos.*;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.MeasurementUnit;
 import de.ptb.dcc.services.DccService;
@@ -14,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -101,11 +99,41 @@ public class DccController {
     @PostMapping("/api/dcc/{dccId}/validate")
     public ResponseEntity<DccDto> validateDcc(
             @PathVariable Long dccId,
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam("fileType") String fileType) {
 
         Dcc dcc = dccService.validateDcc(dccId, fileType);
         return ResponseEntity.ok(mapToDto(dcc));
+    }
+
+    @PostMapping("/api/dcc/external/validate-xml")
+    public ResponseEntity<DccValidationResultDto> dccExternalValidateXml(
+            @RequestParam("file") MultipartFile file) throws IOException {
+        return ResponseEntity.ok(dccService.validateExternalXml(file));
+    }
+
+    @PostMapping("/api/dcc/external/validate-pdf")
+    public ResponseEntity<DccValidationResultDto> dccExternalValidatePdf(
+            @RequestParam("file") MultipartFile file) throws IOException {
+        return ResponseEntity.ok(dccService.validateExternalPdf(file));
+    }
+
+    @GetMapping("/api/dcc/{dccId}/download/signed-xml")
+    public ResponseEntity<byte[]> downloadSignedXml(@PathVariable Long dccId) throws Exception {
+        byte[] content = dccService.getSignedXml(dccId);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"dcc-" + dccId + "-signed.xml\"")
+                .contentType(org.springframework.http.MediaType.APPLICATION_XML)
+                .body(content);
+    }
+
+    @GetMapping("/api/dcc/{dccId}/download/signed-pdf")
+    public ResponseEntity<byte[]> downloadSignedPdf(@PathVariable Long dccId) throws Exception {
+        byte[] content = dccService.getSignedPdf(dccId);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"dcc-" + dccId + "-signed.pdf\"")
+                .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                .body(content);
     }
 
     @PostMapping("/api/dcc/{dccId}/json")
