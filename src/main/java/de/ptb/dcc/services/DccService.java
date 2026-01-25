@@ -202,6 +202,14 @@ public class DccService {
     }
 
     @Transactional
+    public Dcc unpublishDcc(Long dccId) {
+        return dccRepository.findById(dccId).map(dcc -> {
+            dcc.setPublishedAt(null);
+            return dccRepository.save(dcc);
+        }).orElseThrow(() -> new RuntimeException("DCC not found"));
+    }
+
+    @Transactional
     public void deleteDcc(Long dccId) {
         dccRepository.deleteById(dccId);
     }

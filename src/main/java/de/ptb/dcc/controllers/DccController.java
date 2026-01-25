@@ -150,6 +150,12 @@ public class DccController {
         return ResponseEntity.ok(mapToDto(dcc));
     }
 
+    @PostMapping("/api/dcc/{dccId}/unpublish")
+    public ResponseEntity<DccDto> unpublishDcc(@PathVariable Long dccId) {
+        Dcc dcc = dccService.unpublishDcc(dccId);
+        return ResponseEntity.ok(mapToDto(dcc));
+    }
+
     @DeleteMapping("/api/dcc/{dccId}")
     public ResponseEntity<Void> deleteDcc(@PathVariable Long dccId) {
         dccService.deleteDcc(dccId);
