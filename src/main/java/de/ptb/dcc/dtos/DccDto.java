@@ -16,6 +16,8 @@ public class DccDto {
     private String xmlUrl;
     private String dccJson;
     private OffsetDateTime publishedAt;
+    private String hashXml;
+    private String hashPdf;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -43,4 +45,10 @@ public class DccDto {
     public void setDccJson(String dccJson) { this.dccJson = dccJson; }
     public OffsetDateTime getPublishedAt() { return publishedAt; }
     public void setPublishedAt(OffsetDateTime publishedAt) { this.publishedAt = publishedAt; }
+
+    public String getHashXml() { return hashXml; }
+    public void setHashXml(String hashXml) { this.hashXml = hashXml; }
+
+    public String getHashPdf() { return hashPdf; }
+    public void setHashPdf(String hashPdf) { this.hashPdf = hashPdf; }
 }

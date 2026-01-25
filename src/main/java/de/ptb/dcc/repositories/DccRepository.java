@@ -11,5 +11,10 @@ import java.util.List;
 @Repository
 public interface DccRepository extends JpaRepository<Dcc, Long>, JpaSpecificationExecutor<Dcc> {
     List<Dcc> findByMuAndPublishedAtIsNotNull(MeasurementUnit mu);
+
     boolean existsByMuAndPublishedAtIsNotNull(MeasurementUnit mu);
+
+    List<Dcc> findByHashXml(String hashXml);
+
+    List<Dcc> findByHashPdf(String hashPdf);
 }

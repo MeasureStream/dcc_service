@@ -743,6 +743,8 @@ public class DccController {
         dto.setXmlUrl(dcc.getXmlUrl());
         dto.setDccJson(dcc.getDccJson());
         dto.setPublishedAt(dcc.getPublishedAt());
+        dto.setHashXml(dcc.getHashXml());
+        dto.setHashPdf(dcc.getHashPdf());
         dto.setStatus(calculateStatus(dcc));
         return dto;
     }

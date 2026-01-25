@@ -215,8 +215,13 @@ public class DccService {
         DccValidationResultDto result = SigningUtils.validateExternalXml(tempFile);
         tempFile.delete();
         
-        // For now, return empty matching DCCs as we don't store hashes in DB
-        result.setMatchingDccs(Collections.emptyList());
+        if (result.getSignatureDetails() != null && result.getSignatureDetails().getHash() != null) {
+            String hash = result.getSignatureDetails().getHash();
+            List<Dcc> matches = dccRepository.findByHashXml(hash);
+            result.setMatchingDccs(matches.stream().map(this::mapToDto).collect(Collectors.toList()));
+        } else {
+            result.setMatchingDccs(Collections.emptyList());
+        }
         return result;
     }
 
@@ -229,9 +234,46 @@ public class DccService {
         DccValidationResultDto result = SigningUtils.validateExternalPdf(tempFile);
         tempFile.delete();
         
-        // For now, return empty matching DCCs
-        result.setMatchingDccs(Collections.emptyList());
+        if (result.getSignatureDetails() != null && result.getSignatureDetails().getHash() != null) {
+            String hash = result.getSignatureDetails().getHash();
+            List<Dcc> matches = dccRepository.findByHashPdf(hash);
+            result.setMatchingDccs(matches.stream().map(this::mapToDto).collect(Collectors.toList()));
+        } else {
+            result.setMatchingDccs(Collections.emptyList());
+        }
         return result;
+    }
+
+    private de.ptb.dcc.dtos.DccDto mapToDto(Dcc dcc) {
+        de.ptb.dcc.dtos.DccDto dto = new de.ptb.dcc.dtos.DccDto();
+        dto.setId(dcc.getId());
+        if (dcc.getMu() != null) {
+            dto.setMuId(dcc.getMu().getId().toString());
+        }
+        dto.setName(dcc.getName());
+        dto.setCreatedBy(dcc.getCreatedBy());
+        dto.setCreatedAt(dcc.getCreatedAt());
+        dto.setUpdatedAt(dcc.getUpdatedAt());
+        dto.setPdfValid(dcc.isPdfValid());
+        dto.setXmlValid(dcc.isXmlValid());
+        dto.setPdfUrl(dcc.getPdfUrl());
+        dto.setXmlUrl(dcc.getXmlUrl());
+        dto.setDccJson(dcc.getDccJson());
+        dto.setPublishedAt(dcc.getPublishedAt());
+        dto.setHashXml(dcc.getHashXml());
+        dto.setHashPdf(dcc.getHashPdf());
+        dto.setStatus(calculateStatus(dcc));
+        return dto;
+    }
+
+    private String calculateStatus(Dcc dcc) {
+        if (!dcc.isPdfValid() || !dcc.isXmlValid()) {
+            return "RED";
+        }
+        if (dcc.getPublishedAt() == null) {
+            return "YELLOW";
+        }
+        return "GREEN";
     }
 
     public byte[] getSignedXml(Long dccId) throws Exception {

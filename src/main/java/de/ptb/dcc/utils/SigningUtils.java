@@ -58,7 +58,7 @@ public class SigningUtils {
         }
     }
 
-    public static void signXml(File input, File output, PrivateKey key, X509Certificate cert) throws Exception {
+    public static String signXml(File input, File output, PrivateKey key, X509Certificate cert) throws Exception {
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
         dbf.setNamespaceAware(true);
         Document doc = dbf.newDocumentBuilder().parse(new FileInputStream(input));
@@ -138,11 +138,17 @@ public class SigningUtils {
 
         sig.sign(key);
 
+        String hash = null;
+        if (sig.getSignedInfo().getLength() > 0) {
+            hash = Base64.getEncoder().encodeToString(sig.getSignedInfo().item(0).getDigestValue());
+        }
+
         TransformerFactory tf = TransformerFactory.newInstance();
         Transformer transformer = tf.newTransformer();
         try (FileOutputStream fos = new FileOutputStream(output)) {
             transformer.transform(new DOMSource(doc), new StreamResult(fos));
         }
+        return hash;
     }
 
     public static boolean verifyXml(File file) {
@@ -184,7 +190,7 @@ public class SigningUtils {
         }
     }
 
-    public static boolean signPdf(String inputPath, String outputPath, PrivateKey privateKey, X509Certificate certificate) {
+    public static String signPdf(String inputPath, String outputPath, PrivateKey privateKey, X509Certificate certificate) {
         try {
             PdfReader reader = new PdfReader(inputPath);
             FileOutputStream fos = new FileOutputStream(outputPath);
@@ -198,10 +204,13 @@ public class SigningUtils {
             signer.signDetached(digest, signature, certChain, null, null, null, 0, com.itextpdf.signatures.PdfSigner.CryptoStandard.CMS);
             reader.close();
             fos.close();
-            return true;
+            
+            // Extract hash from the newly signed file
+            DccValidationResultDto result = validateExternalPdf(new File(outputPath));
+            return result.getSignatureDetails() != null ? result.getSignatureDetails().getHash() : null;
         } catch (Exception e) {
             System.err.println("[ERROR] Failed to sign PDF: " + e.getMessage());
-            return false;
+            return null;
         }
     }
 

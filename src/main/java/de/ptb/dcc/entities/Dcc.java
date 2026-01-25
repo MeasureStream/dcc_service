@@ -48,6 +48,12 @@ public class Dcc {
     @Column(name = "dcc_json", columnDefinition = "TEXT", nullable = false)
     private String dccJson;
 
+    @Column(name = "hash_xml", columnDefinition = "TEXT")
+    private String hashXml;
+
+    @Column(name = "hash_pdf", columnDefinition = "TEXT")
+    private String hashPdf;
+
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
@@ -83,4 +89,10 @@ public class Dcc {
     public void setPublishedAt(OffsetDateTime publishedAt) { this.publishedAt = publishedAt; }
     public String getDccJson() { return dccJson; }
     public void setDccJson(String dccJson) { this.dccJson = dccJson; }
+
+    public String getHashXml() { return hashXml; }
+    public void setHashXml(String hashXml) { this.hashXml = hashXml; }
+
+    public String getHashPdf() { return hashPdf; }
+    public void setHashPdf(String hashPdf) { this.hashPdf = hashPdf; }
 }

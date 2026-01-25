@@ -43,21 +43,23 @@ public class DccSigningService {
 
             // 3. Signing
             System.out.println("Signing XML...");
-            SigningUtils.signXml(tempXml, signedXml, privateKey, cert);
+            String hashXml = SigningUtils.signXml(tempXml, signedXml, privateKey, cert);
 
             System.out.println("Signing PDF...");
-            boolean pdfSigned = SigningUtils.signPdf(tempPdf.getAbsolutePath(), signedPdf.getAbsolutePath(), privateKey, cert);
+            String hashPdf = SigningUtils.signPdf(tempPdf.getAbsolutePath(), signedPdf.getAbsolutePath(), privateKey, cert);
 
             // 4. Final Verification
             System.out.println("Running final XML verification...");
             boolean xmlValid = SigningUtils.verifyXml(signedXml);
 
             System.out.println("Running final PDF verification...");
-            boolean pdfValid = pdfSigned && signedPdf.exists() && signedPdf.length() > 0;
+            boolean pdfValid = hashPdf != null && signedPdf.exists() && signedPdf.length() > 0;
 
             // 5. Update DCC entity
             dcc.setXmlValid(xmlValid);
             dcc.setPdfValid(pdfValid);
+            dcc.setHashXml(hashXml);
+            dcc.setHashPdf(hashPdf);
 
             if (xmlValid) System.out.println("[SUCCESS] XML Validation passed.");
             else System.err.println("[FAILURE] XML Validation failed.");
