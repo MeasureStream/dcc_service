@@ -1,0 +1,20 @@
+name: Build and Publish Spring Boot Image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Build Spring Boot Image
+        uses: teheidoma/spring-boot-image-build-action-jdk17@0.0.2
+        with:
+          registry_username: ${{ secrets.DOCKER_USERNAME }}
+          registry_password: ${{ secrets.DOCKER_PASSWORD }}
+          registry_hostname: 'docker.io'
+          include_commit_sha: 'false'
