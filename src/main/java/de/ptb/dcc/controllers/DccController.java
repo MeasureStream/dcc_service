@@ -89,6 +89,11 @@ public class DccController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/verify-token")
+    public ResponseEntity<String> verifyToken() {
+        return ResponseEntity.ok("Token is valid");
+    }
+
     @PutMapping("/api/dcc/{dccId}")
     public ResponseEntity<DccDto> updateDcc(@PathVariable Long dccId, @RequestBody DccUpdateRequest request) {
         return dccService.updateDcc(dccId, request.getName(), request.getDccJson())
@@ -100,8 +105,11 @@ public class DccController {
     public ResponseEntity<DccDto> validateDcc(
             @PathVariable Long dccId,
             @RequestParam(value = "file", required = false) MultipartFile file,
-            @RequestParam("fileType") String fileType) {
+            @RequestParam(value = "fileType", required = false) String fileType) {
 
+        if (fileType == null) {
+            return ResponseEntity.badRequest().build();
+        }
         Dcc dcc = dccService.validateDcc(dccId, fileType);
         return ResponseEntity.ok(mapToDto(dcc));
     }
