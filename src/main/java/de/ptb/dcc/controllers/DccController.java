@@ -5,6 +5,7 @@ import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.MeasurementUnit;
 import de.ptb.dcc.services.DccService;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -106,18 +107,35 @@ public class DccController {
     @PostMapping("/api/dcc/{dccId}/validate")
     public ResponseEntity<DccDto> validateDcc(
             @PathVariable Long dccId,
-            @RequestParam(value = "file", required = false) MultipartFile file,
-            @RequestParam(value = "fileType", required = false) String fileType) {
+            @RequestParam(value = "fileType", required = false) String fileType,
+            @RequestHeader(value = "X-FileType", required = false) String fileTypeHeader,
+            HttpServletRequest request) {
 
-        log.info("Received validation request for DCC ID: {}, fileType: {}, hasFile: {}", 
-                dccId, fileType, (file != null && !file.isEmpty()));
+        // Log ALL available info for debugging
+        log.info("--- Validation Request Diagnostic ---");
+        log.info("Request URI: {}", request.getRequestURI());
+        log.info("Query String: {}", request.getQueryString());
+        log.info("Content Type: {}", request.getContentType());
+        log.info("DCC ID: {}", dccId);
+        log.info("fileType Param: {}", fileType);
+        log.info("X-FileType Header: {}", fileTypeHeader);
+        
+        String effectiveFileType = fileType != null ? fileType : fileTypeHeader;
 
-        if (fileType == null) {
-            log.warn("Validation failed: fileType parameter is missing");
-            return ResponseEntity.badRequest().build();
+        if (effectiveFileType == null) {
+            log.error("Validation rejected: No fileType found in query params or headers");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
         }
-        Dcc dcc = dccService.validateDcc(dccId, fileType);
-        return ResponseEntity.ok(mapToDto(dcc));
+        
+        try {
+            // Note: 'file' parameter is removed from method signature to avoid 400 errors 
+            // on non-multipart requests. If needed, we can extract it manually from the request.
+            Dcc dcc = dccService.validateDcc(dccId, effectiveFileType);
+            return ResponseEntity.ok(mapToDto(dcc));
+        } catch (Exception e) {
+            log.error("Validation Service Error: {}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     @PostMapping("/api/dcc/external/validate-xml")
