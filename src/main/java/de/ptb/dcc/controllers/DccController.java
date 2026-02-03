@@ -105,8 +105,7 @@ public class DccController {
     public ResponseEntity<DccDto> validateDcc(
             @PathVariable Long dccId,
             @RequestParam(value = "file", required = false) MultipartFile file,
-            @RequestParam(value = "fileType", required = false) String fileType,
-            @RequestHeader HttpHeaders headers) {
+            @RequestParam(value = "fileType", required = false) String fileType) {
 
         // Debug logging to help trace the issue
         System.out.println("Validate request for ID: " + dccId);
