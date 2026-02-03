@@ -4,9 +4,12 @@ import de.ptb.dcc.dtos.DccUpdateRequest;
 import de.ptb.dcc.dtos.DccValidationResultDto;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.MeasurementUnit;
+import de.ptb.dcc.entities.User;
 import de.ptb.dcc.repositories.DccRepository;
 import de.ptb.dcc.repositories.MeasurementUnitRepository;
+import de.ptb.dcc.repositories.UserRepository;
 import de.ptb.dcc.utils.SigningUtils;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -14,12 +17,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
@@ -29,9 +34,7 @@ import java.nio.file.Files;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -40,6 +43,7 @@ public class DccService {
 
     private final DccRepository dccRepository;
     private final MeasurementUnitRepository muRepository;
+    private final UserRepository userRepository;
     private final DccSigningService signingService;
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -47,9 +51,10 @@ public class DccService {
     private String gemimegBackendUrl;
 
     public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository,
-            DccSigningService signingService) {
+            UserRepository userRepository, DccSigningService signingService) {
         this.dccRepository = dccRepository;
         this.muRepository = muRepository;
+        this.userRepository = userRepository;
         this.signingService = signingService;
     }
 
@@ -59,8 +64,15 @@ public class DccService {
         Sort sort = Sort.by(Sort.Direction.fromString(orderDir), orderBy);
         Pageable pageable = PageRequest.of(offset / limit, limit, sort);
 
+        String currentUserId = getCurrentUserId();
+        boolean isAdmin = isAdmin();
+
         Specification<Dcc> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            if (!isAdmin) {
+                predicates.add(cb.equal(root.get("user").get("userId"), currentUserId));
+            }
 
             if (muId != null && !muId.isEmpty()) {
                 try {
@@ -90,16 +102,17 @@ public class DccService {
         return dccRepository.findAll(spec, pageable);
     }
 
-    public List<MeasurementUnit> listMus(String userId, boolean all) {
-        if (all) {
+    public List<MeasurementUnit> listMus(boolean all) {
+        if (isAdmin()) {
             return muRepository.findAll();
         } else {
-            return muRepository.findAllByUser_UserId(userId);
+            return muRepository.findAllByUser_UserId(getCurrentUserId());
         }
     }
 
-    public List<MeasurementUnit> listPublicMus(String userId, boolean all) {
-        List<MeasurementUnit> baseMus = all ? muRepository.findAll() : muRepository.findAllByUser_UserId(userId);
+    public List<MeasurementUnit> listPublicMus(boolean all) {
+        List<MeasurementUnit> baseMus = (all || isAdmin()) ? muRepository.findAll()
+                : muRepository.findAllByUser_UserId(getCurrentUserId());
         return baseMus.stream()
                 .filter(mu -> dccRepository.existsByMuAndPublishedAtIsNotNull(mu))
                 .collect(Collectors.toList());
@@ -111,16 +124,22 @@ public class DccService {
     }
 
     @Transactional
-    public Dcc createDcc(String muId, String name, String createdBy, String dccJson) {
+    public Dcc createDcc(String muId, String name, String dccJson) {
         Dcc dcc = new Dcc();
         dcc.setName(name);
-        dcc.setCreatedBy(createdBy);
         dcc.setDccJson(dccJson != null ? dccJson : "{}");
+        dcc.setCreatedBy(getCurrentUserId());
+        dcc.setUser(getOrCreateCurrentUser());
 
         if (muId != null && !muId.isEmpty()) {
             try {
                 Long id = Long.parseLong(muId);
-                muRepository.findById(id).ifPresent(dcc::setMu);
+                muRepository.findById(id).ifPresent(mu -> {
+                    if (!isAdmin() && !mu.getUser().getUserId().equals(getCurrentUserId())) {
+                        throw new RuntimeException("You don't have access to this Measurement Unit");
+                    }
+                    dcc.setMu(mu);
+                });
             } catch (NumberFormatException e) {
             }
         }
@@ -129,18 +148,22 @@ public class DccService {
     }
 
     public Optional<Dcc> getDcc(Long dccId) {
-        return dccRepository.findById(dccId);
+        if (isAdmin()) {
+            return dccRepository.findById(dccId);
+        }
+        return dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId());
     }
 
     @Transactional
     public Optional<Dcc> updateDcc(Long dccId, DccUpdateRequest request) {
-        return dccRepository.findById(dccId).map(dcc -> {
+        Optional<Dcc> existingDcc = isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId());
+
+        return existingDcc.map(dcc -> {
             if (request.getName() != null)
                 dcc.setName(request.getName());
             if (request.getDccJson() != null)
                 dcc.setDccJson(request.getDccJson());
-            if (request.getCreatedBy() != null)
-                dcc.setCreatedBy(request.getCreatedBy());
             if (request.getCalibrationDate() != null)
                 dcc.setCalibrationDate(request.getCalibrationDate());
             if (request.getExpirationDate() != null)
@@ -151,7 +174,12 @@ public class DccService {
                 } else {
                     try {
                         Long muId = Long.parseLong(request.getMuId());
-                        muRepository.findById(muId).ifPresent(dcc::setMu);
+                        muRepository.findById(muId).ifPresent(mu -> {
+                            if (!isAdmin() && !mu.getUser().getUserId().equals(getCurrentUserId())) {
+                                throw new RuntimeException("You don't have access to this Measurement Unit");
+                            }
+                            dcc.setMu(mu);
+                        });
                     } catch (NumberFormatException e) {
                     }
                 }
@@ -162,7 +190,9 @@ public class DccService {
 
     @Transactional
     public Dcc validateDcc(Long dccId, String fileType) {
-        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
 
         try {
             System.out.println("=== Starting Validation Chain for DCC ID: " + dccId + " ===");
@@ -199,42 +229,49 @@ public class DccService {
 
     @Transactional
     public Dcc updateDccJson(Long dccId, String dccJson) {
-        return dccRepository.findById(dccId).map(dcc -> {
-            dcc.setDccJson(dccJson);
-            return dccRepository.save(dcc);
-        }).orElseThrow(() -> new RuntimeException("DCC not found"));
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
+        dcc.setDccJson(dccJson);
+        return dccRepository.save(dcc);
     }
 
     @Transactional
     public Dcc publishDcc(Long dccId) {
-        return dccRepository.findById(dccId).map(dcc -> {
-            dcc.setPublishedAt(OffsetDateTime.now());
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
 
-            if (dcc.getMu() != null) {
-                List<Dcc> previousDccs = dccRepository.findByMuAndPublishedAtIsNotNull(dcc.getMu());
-                for (Dcc prev : previousDccs) {
-                    if (!prev.getId().equals(dcc.getId())) {
-                        prev.setPublishedAt(null);
-                        dccRepository.save(prev);
-                    }
+        dcc.setPublishedAt(OffsetDateTime.now());
+
+        if (dcc.getMu() != null) {
+            List<Dcc> previousDccs = dccRepository.findByMuAndPublishedAtIsNotNull(dcc.getMu());
+            for (Dcc prev : previousDccs) {
+                if (!prev.getId().equals(dcc.getId())) {
+                    prev.setPublishedAt(null);
+                    dccRepository.save(prev);
                 }
             }
+        }
 
-            return dccRepository.save(dcc);
-        }).orElseThrow(() -> new RuntimeException("DCC not found"));
+        return dccRepository.save(dcc);
     }
 
     @Transactional
     public Dcc unpublishDcc(Long dccId) {
-        return dccRepository.findById(dccId).map(dcc -> {
-            dcc.setPublishedAt(null);
-            return dccRepository.save(dcc);
-        }).orElseThrow(() -> new RuntimeException("DCC not found"));
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
+        dcc.setPublishedAt(null);
+        return dccRepository.save(dcc);
     }
 
     @Transactional
     public void deleteDcc(Long dccId) {
-        dccRepository.deleteById(dccId);
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
+        dccRepository.delete(dcc);
     }
 
     public DccValidationResultDto validateExternalXml(MultipartFile file) throws IOException {
@@ -310,7 +347,9 @@ public class DccService {
     }
 
     public byte[] getSignedXml(Long dccId) throws Exception {
-        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
         String xmlContent = convertToXml(dcc.getDccJson());
 
         File tempXml = File.createTempFile("dcc-download-", ".xml");
@@ -331,7 +370,9 @@ public class DccService {
     }
 
     public byte[] getSignedPdf(Long dccId) throws Exception {
-        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
         byte[] pdfContent = convertToPdf(dcc.getDccJson());
 
         File tempPdf = File.createTempFile("dcc-download-", ".pdf");
@@ -349,5 +390,37 @@ public class DccService {
             tempPdf.delete();
             signedPdf.delete();
         }
+    }
+
+    private String getCurrentUserId() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof Jwt) {
+            return ((Jwt) principal).getSubject();
+        }
+        return principal.toString();
+    }
+
+    private boolean isAdmin() {
+        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_app-admin"));
+    }
+
+    private User getOrCreateCurrentUser() {
+        String userId = getCurrentUserId();
+        return userRepository.findById(userId).orElseGet(() -> {
+            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            if (principal instanceof Jwt) {
+                Jwt jwt = (Jwt) principal;
+                User user = new User();
+                user.setUserId(userId);
+                user.setName(jwt.getClaimAsString("given_name"));
+                user.setSurname(jwt.getClaimAsString("family_name"));
+                user.setEmail(jwt.getClaimAsString("email"));
+                return userRepository.save(user);
+            }
+            User user = new User();
+            user.setUserId(userId);
+            return userRepository.save(user);
+        });
     }
 }

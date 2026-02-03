@@ -7,10 +7,13 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface DccRepository extends JpaRepository<Dcc, Long>, JpaSpecificationExecutor<Dcc> {
     List<Dcc> findByMuAndPublishedAtIsNotNull(MeasurementUnit mu);
+
+    Optional<Dcc> findByIdAndUser_UserId(Long id, String userId);
 
     boolean existsByMuAndPublishedAtIsNotNull(MeasurementUnit mu);
 

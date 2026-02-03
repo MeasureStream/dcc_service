@@ -48,9 +48,7 @@ public class DccController {
     @GetMapping("/api/mus")
     public ResponseEntity<List<MeasurementUnitDto>> listMus(
             @RequestParam(required = false, defaultValue = "false") boolean all) {
-        // For now mock userId or get from security context if implemented
-        String userId = "test-user";
-        List<MeasurementUnit> mus = dccService.listMus(userId, all);
+        List<MeasurementUnit> mus = dccService.listMus(all);
         List<MeasurementUnitDto> dtos = mus.stream()
                 .map(this::mapToMuDto)
                 .collect(Collectors.toList());
@@ -60,8 +58,7 @@ public class DccController {
     @GetMapping("/api/public/mus")
     public ResponseEntity<List<MeasurementUnitDto>> listPublicMus(
             @RequestParam(required = false, defaultValue = "false") boolean all) {
-        String userId = "test-user"; // Mock userId
-        List<MeasurementUnit> mus = dccService.listPublicMus(userId, all);
+        List<MeasurementUnit> mus = dccService.listPublicMus(all);
         List<MeasurementUnitDto> dtos = mus.stream()
                 .map(this::mapToMuDto)
                 .collect(Collectors.toList());
@@ -77,8 +74,7 @@ public class DccController {
 
     @PostMapping("/api/dcc")
     public ResponseEntity<DccDto> createDcc(@RequestBody DccCreateRequest request) {
-        String createdBy = "anonymous";
-        Dcc dcc = dccService.createDcc(request.getMuId(), request.getName(), createdBy, request.getDccJson());
+        Dcc dcc = dccService.createDcc(request.getMuId(), request.getName(), request.getDccJson());
         return ResponseEntity.status(HttpStatus.CREATED).body(mapToDto(dcc));
     }
 

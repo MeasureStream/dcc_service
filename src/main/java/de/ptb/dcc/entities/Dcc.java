@@ -20,6 +20,19 @@ public class Dcc {
     @JsonIgnore
     private MeasurementUnit mu;
 
+    @ManyToOne
+    @JoinColumn(name = "user_user_id", referencedColumnName = "user_id")
+    @JsonIgnore
+    private User user;
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
     @Column(name = "created_by", nullable = false)
     private String createdBy;
 
@@ -70,40 +83,131 @@ public class Dcc {
         updatedAt = OffsetDateTime.now();
     }
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public MeasurementUnit getMu() { return mu; }
-    public void setMu(MeasurementUnit mu) { this.mu = mu; }
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
-    public OffsetDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
-    public boolean isPdfValid() { return pdfValid; }
-    public void setPdfValid(boolean pdfValid) { this.pdfValid = pdfValid; }
-    public boolean isXmlValid() { return xmlValid; }
-    public void setXmlValid(boolean xmlValid) { this.xmlValid = xmlValid; }
-    public String getPdfUrl() { return pdfUrl; }
-    public void setPdfUrl(String pdfUrl) { this.pdfUrl = pdfUrl; }
-    public String getXmlUrl() { return xmlUrl; }
-    public void setXmlUrl(String xmlUrl) { this.xmlUrl = xmlUrl; }
-    public OffsetDateTime getPublishedAt() { return publishedAt; }
-    public void setPublishedAt(OffsetDateTime publishedAt) { this.publishedAt = publishedAt; }
-    public String getDccJson() { return dccJson; }
-    public void setDccJson(String dccJson) { this.dccJson = dccJson; }
+    public Long getId() {
+        return id;
+    }
 
-    public OffsetDateTime getCalibrationDate() { return calibrationDate; }
-    public void setCalibrationDate(OffsetDateTime calibrationDate) { this.calibrationDate = calibrationDate; }
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    public OffsetDateTime getExpirationDate() { return expirationDate; }
-    public void setExpirationDate(OffsetDateTime expirationDate) { this.expirationDate = expirationDate; }
+    public String getName() {
+        return name;
+    }
 
-    public String getHashXml() { return hashXml; }
-    public void setHashXml(String hashXml) { this.hashXml = hashXml; }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    public String getHashPdf() { return hashPdf; }
-    public void setHashPdf(String hashPdf) { this.hashPdf = hashPdf; }
+    public MeasurementUnit getMu() {
+        return mu;
+    }
+
+    public void setMu(MeasurementUnit mu) {
+        this.mu = mu;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(OffsetDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(OffsetDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public boolean isPdfValid() {
+        return pdfValid;
+    }
+
+    public void setPdfValid(boolean pdfValid) {
+        this.pdfValid = pdfValid;
+    }
+
+    public boolean isXmlValid() {
+        return xmlValid;
+    }
+
+    public void setXmlValid(boolean xmlValid) {
+        this.xmlValid = xmlValid;
+    }
+
+    public String getPdfUrl() {
+        return pdfUrl;
+    }
+
+    public void setPdfUrl(String pdfUrl) {
+        this.pdfUrl = pdfUrl;
+    }
+
+    public String getXmlUrl() {
+        return xmlUrl;
+    }
+
+    public void setXmlUrl(String xmlUrl) {
+        this.xmlUrl = xmlUrl;
+    }
+
+    public OffsetDateTime getPublishedAt() {
+        return publishedAt;
+    }
+
+    public void setPublishedAt(OffsetDateTime publishedAt) {
+        this.publishedAt = publishedAt;
+    }
+
+    public String getDccJson() {
+        return dccJson;
+    }
+
+    public void setDccJson(String dccJson) {
+        this.dccJson = dccJson;
+    }
+
+    public OffsetDateTime getCalibrationDate() {
+        return calibrationDate;
+    }
+
+    public void setCalibrationDate(OffsetDateTime calibrationDate) {
+        this.calibrationDate = calibrationDate;
+    }
+
+    public OffsetDateTime getExpirationDate() {
+        return expirationDate;
+    }
+
+    public void setExpirationDate(OffsetDateTime expirationDate) {
+        this.expirationDate = expirationDate;
+    }
+
+    public String getHashXml() {
+        return hashXml;
+    }
+
+    public void setHashXml(String hashXml) {
+        this.hashXml = hashXml;
+    }
+
+    public String getHashPdf() {
+        return hashPdf;
+    }
+
+    public void setHashPdf(String hashPdf) {
+        this.hashPdf = hashPdf;
+    }
 }
