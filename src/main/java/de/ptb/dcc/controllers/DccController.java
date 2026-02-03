@@ -4,6 +4,7 @@ import de.ptb.dcc.dtos.*;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.MeasurementUnit;
 import de.ptb.dcc.services.DccService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @CrossOrigin(origins = "*")
 public class DccController {
@@ -107,7 +109,11 @@ public class DccController {
             @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(value = "fileType", required = false) String fileType) {
 
+        log.info("Received validation request for DCC ID: {}, fileType: {}, hasFile: {}", 
+                dccId, fileType, (file != null && !file.isEmpty()));
+
         if (fileType == null) {
+            log.warn("Validation failed: fileType parameter is missing");
             return ResponseEntity.badRequest().build();
         }
         Dcc dcc = dccService.validateDcc(dccId, fileType);

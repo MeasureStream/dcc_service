@@ -8,6 +8,7 @@ import de.ptb.dcc.repositories.DccRepository;
 import de.ptb.dcc.repositories.MeasurementUnitRepository;
 import de.ptb.dcc.utils.SigningUtils;
 import jakarta.persistence.criteria.Predicate;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,6 +17,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -35,6 +38,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class DccService {
 
@@ -43,10 +47,11 @@ public class DccService {
     private final DccSigningService signingService;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    @Value("${gemimeg.backend.url}")
+    @Value("${gemimeg.backend.url:http://172.20.0.129:10001}")
     private String gemimegBackendUrl;
 
-    public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository, DccSigningService signingService) {
+    public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository,
+            DccSigningService signingService) {
         this.dccRepository = dccRepository;
         this.muRepository = muRepository;
         this.signingService = signingService;
@@ -161,13 +166,12 @@ public class DccService {
 
     @Transactional
     public Dcc validateDcc(Long dccId, String fileType) {
-        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
+        log.info("Starting validation for DCC ID: {}, type: {}", dccId, fileType);
+        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found with ID: " + dccId));
 
         try {
-            System.out.println("=== Starting Validation Chain for DCC ID: " + dccId + " ===");
-
             // 1. Conversion
-            System.out.println("Converting JSON to XML/PDF via " + gemimegBackendUrl + "...");
+            log.info("Converting JSON to XML/PDF via {}...", gemimegBackendUrl);
             String xmlContent = convertToXml(dcc.getDccJson());
             byte[] pdfContent = convertToPdf(dcc.getDccJson());
 
@@ -175,25 +179,39 @@ public class DccService {
             return signingService.performSigningAndVerification(dcc, xmlContent, pdfContent);
 
         } catch (Exception e) {
-            System.err.println("[ERROR] Validation chain failed: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Validation chain failed for DCC ID {}: {}", dccId, e.getMessage(), e);
+            throw new RuntimeException("Validation failed: " + e.getMessage(), e);
         }
-
-        return dccRepository.save(dcc);
     }
 
     private String convertToXml(String dccJson) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
-        return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/xml", entity, String.class);
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
+            return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/xml", entity, String.class);
+        } catch (HttpStatusCodeException e) {
+            log.error("Gemimeg Backend XML conversion failed. Status: {}, Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Gemimeg XML conversion failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            log.error("Failed to connect to Gemimeg Backend at {}: {}", gemimegBackendUrl, e.getMessage());
+            throw new RuntimeException("Could not connect to Gemimeg Backend: " + e.getMessage(), e);
+        }
     }
 
     private byte[] convertToPdf(String dccJson) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
-        return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/pdf", entity, byte[].class);
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
+            return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/pdf", entity, byte[].class);
+        } catch (HttpStatusCodeException e) {
+            log.error("Gemimeg Backend PDF conversion failed. Status: {}, Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Gemimeg PDF conversion failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            log.error("Failed to connect to Gemimeg Backend at {}: {}", gemimegBackendUrl, e.getMessage());
+            throw new RuntimeException("Could not connect to Gemimeg Backend: " + e.getMessage(), e);
+        }
     }
 
     @Transactional
@@ -241,10 +259,10 @@ public class DccService {
         try (FileOutputStream fos = new FileOutputStream(tempFile)) {
             fos.write(file.getBytes());
         }
-        
+
         DccValidationResultDto result = SigningUtils.validateExternalXml(tempFile);
         tempFile.delete();
-        
+
         if (result.getSignatureDetails() != null && result.getSignatureDetails().getHash() != null) {
             String hash = result.getSignatureDetails().getHash();
             List<Dcc> matches = dccRepository.findByHashXml(hash);
@@ -260,10 +278,10 @@ public class DccService {
         try (FileOutputStream fos = new FileOutputStream(tempFile)) {
             fos.write(file.getBytes());
         }
-        
+
         DccValidationResultDto result = SigningUtils.validateExternalPdf(tempFile);
         tempFile.delete();
-        
+
         if (result.getSignatureDetails() != null && result.getSignatureDetails().getHash() != null) {
             String hash = result.getSignatureDetails().getHash();
             List<Dcc> matches = dccRepository.findByHashPdf(hash);
@@ -311,17 +329,17 @@ public class DccService {
     public byte[] getSignedXml(Long dccId) throws Exception {
         Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
         String xmlContent = convertToXml(dcc.getDccJson());
-        
+
         File tempXml = File.createTempFile("dcc-download-", ".xml");
         File signedXml = File.createTempFile("dcc-signed-download-", ".xml");
         try {
             Files.writeString(tempXml.toPath(), xmlContent);
-            
+
             PrivateKey privateKey = SigningUtils.loadPrivateKey();
             X509Certificate cert = SigningUtils.loadCertificate();
-            
+
             SigningUtils.signXml(tempXml, signedXml, privateKey, cert);
-            
+
             return Files.readAllBytes(signedXml.toPath());
         } finally {
             tempXml.delete();
@@ -332,17 +350,17 @@ public class DccService {
     public byte[] getSignedPdf(Long dccId) throws Exception {
         Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
         byte[] pdfContent = convertToPdf(dcc.getDccJson());
-        
+
         File tempPdf = File.createTempFile("dcc-download-", ".pdf");
         File signedPdf = File.createTempFile("dcc-signed-download-", ".pdf");
         try {
             Files.write(tempPdf.toPath(), pdfContent);
-            
+
             PrivateKey privateKey = SigningUtils.loadPrivateKey();
             X509Certificate cert = SigningUtils.loadCertificate();
-            
+
             SigningUtils.signPdf(tempPdf.getAbsolutePath(), signedPdf.getAbsolutePath(), privateKey, cert);
-            
+
             return Files.readAllBytes(signedPdf.toPath());
         } finally {
             tempPdf.delete();

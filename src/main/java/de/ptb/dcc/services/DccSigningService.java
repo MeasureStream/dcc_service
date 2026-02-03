@@ -3,6 +3,7 @@ package de.ptb.dcc.services;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.repositories.DccRepository;
 import de.ptb.dcc.utils.SigningUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 
+@Slf4j
 @Service
 public class DccSigningService {
 
@@ -23,7 +25,7 @@ public class DccSigningService {
     @Transactional
     public Dcc performSigningAndVerification(Dcc dcc, String xmlContent, byte[] pdfContent) {
         try {
-            System.out.println("=== Starting Signing and Verification for DCC ID: " + dcc.getId() + " ===");
+            log.info("Starting Signing and Verification for DCC ID: {}", dcc.getId());
 
             File tempXml = File.createTempFile("dcc-", ".xml");
             File tempPdf = File.createTempFile("dcc-", ".pdf");
@@ -37,35 +39,27 @@ public class DccSigningService {
             PrivateKey privateKey = SigningUtils.loadPrivateKey();
             X509Certificate cert = SigningUtils.loadCertificate();
 
-            // 2. Initial Verification (optional, usually fails for unsigned)
-            System.out.println("Running initial XML verification...");
-            SigningUtils.verifyXml(tempXml);
-
-            // 3. Signing
-            System.out.println("Signing XML...");
+            // 2. Signing
+            log.info("Signing XML for DCC ID: {}...", dcc.getId());
             String hashXml = SigningUtils.signXml(tempXml, signedXml, privateKey, cert);
 
-            System.out.println("Signing PDF...");
+            log.info("Signing PDF for DCC ID: {}...", dcc.getId());
             String hashPdf = SigningUtils.signPdf(tempPdf.getAbsolutePath(), signedPdf.getAbsolutePath(), privateKey, cert);
 
-            // 4. Final Verification
-            System.out.println("Running final XML verification...");
+            // 3. Final Verification
+            log.info("Verifying signed XML for DCC ID: {}...", dcc.getId());
             boolean xmlValid = SigningUtils.verifyXml(signedXml);
 
-            System.out.println("Running final PDF verification...");
+            log.info("Verifying signed PDF for DCC ID: {}...", dcc.getId());
             boolean pdfValid = hashPdf != null && signedPdf.exists() && signedPdf.length() > 0;
 
-            // 5. Update DCC entity
+            // 4. Update DCC entity
             dcc.setXmlValid(xmlValid);
             dcc.setPdfValid(pdfValid);
             dcc.setHashXml(hashXml);
             dcc.setHashPdf(hashPdf);
 
-            if (xmlValid) System.out.println("[SUCCESS] XML Validation passed.");
-            else System.err.println("[FAILURE] XML Validation failed.");
-
-            if (pdfValid) System.out.println("[SUCCESS] PDF Validation passed.");
-            else System.err.println("[FAILURE] PDF Validation failed.");
+            log.info("DCC ID {} validation results - XML: {}, PDF: {}", dcc.getId(), xmlValid, pdfValid);
 
             // Cleanup
             tempXml.delete();
@@ -73,13 +67,11 @@ public class DccSigningService {
             signedXml.delete();
             signedPdf.delete();
 
-            System.out.println("=== Signing and Verification Completed ===");
+            return dccRepository.save(dcc);
 
         } catch (Exception e) {
-            System.err.println("[ERROR] Signing/Verification failed: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Signing/Verification failed for DCC ID {}: {}", dcc.getId(), e.getMessage(), e);
+            throw new RuntimeException("Signing/Verification failed: " + e.getMessage(), e);
         }
-
-        return dccRepository.save(dcc);
     }
 }
