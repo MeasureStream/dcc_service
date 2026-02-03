@@ -7,6 +7,7 @@ import de.ptb.dcc.repositories.DccRepository;
 import de.ptb.dcc.repositories.MeasurementUnitRepository;
 import de.ptb.dcc.utils.SigningUtils;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -40,6 +41,9 @@ public class DccService {
     private final MeasurementUnitRepository muRepository;
     private final DccSigningService signingService;
     private final RestTemplate restTemplate = new RestTemplate();
+
+    @Value("${gemimeg.backend.url}")
+    private String gemimegBackendUrl;
 
     public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository, DccSigningService signingService) {
         this.dccRepository = dccRepository;
@@ -145,7 +149,7 @@ public class DccService {
             System.out.println("=== Starting Validation Chain for DCC ID: " + dccId + " ===");
 
             // 1. Conversion
-            System.out.println("Converting JSON to XML/PDF via localhost:10001...");
+            System.out.println("Converting JSON to XML/PDF via " + gemimegBackendUrl + "...");
             String xmlContent = convertToXml(dcc.getDccJson());
             byte[] pdfContent = convertToPdf(dcc.getDccJson());
 
@@ -164,14 +168,14 @@ public class DccService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
-        return restTemplate.postForObject("http://localhost:10001/api/v1/dcc/xsd/dcc/xml", entity, String.class);
+        return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/xml", entity, String.class);
     }
 
     private byte[] convertToPdf(String dccJson) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
-        return restTemplate.postForObject("http://localhost:10001/api/v1/dcc/xsd/dcc/pdf", entity, byte[].class);
+        return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/pdf", entity, byte[].class);
     }
 
     @Transactional
