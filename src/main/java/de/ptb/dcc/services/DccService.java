@@ -8,7 +8,6 @@ import de.ptb.dcc.repositories.DccRepository;
 import de.ptb.dcc.repositories.MeasurementUnitRepository;
 import de.ptb.dcc.utils.SigningUtils;
 import jakarta.persistence.criteria.Predicate;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -17,8 +16,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -38,7 +35,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 public class DccService {
 
@@ -47,7 +43,7 @@ public class DccService {
     private final DccSigningService signingService;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    @Value("${gemimeg.backend.url:http://172.20.0.129:10001}")
+    @Value("${gemimeg.backend.url}")
     private String gemimegBackendUrl;
 
     public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository,
@@ -166,12 +162,13 @@ public class DccService {
 
     @Transactional
     public Dcc validateDcc(Long dccId, String fileType) {
-        log.info("Starting validation for DCC ID: {}, type: {}", dccId, fileType);
-        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found with ID: " + dccId));
+        Dcc dcc = dccRepository.findById(dccId).orElseThrow(() -> new RuntimeException("DCC not found"));
 
         try {
+            System.out.println("=== Starting Validation Chain for DCC ID: " + dccId + " ===");
+
             // 1. Conversion
-            log.info("Converting JSON to XML/PDF via {}...", gemimegBackendUrl);
+            System.out.println("Converting JSON to XML/PDF via " + gemimegBackendUrl + "...");
             String xmlContent = convertToXml(dcc.getDccJson());
             byte[] pdfContent = convertToPdf(dcc.getDccJson());
 
@@ -179,39 +176,25 @@ public class DccService {
             return signingService.performSigningAndVerification(dcc, xmlContent, pdfContent);
 
         } catch (Exception e) {
-            log.error("Validation chain failed for DCC ID {}: {}", dccId, e.getMessage(), e);
-            throw new RuntimeException("Validation failed: " + e.getMessage(), e);
+            System.err.println("[ERROR] Validation chain failed: " + e.getMessage());
+            e.printStackTrace();
         }
+
+        return dccRepository.save(dcc);
     }
 
     private String convertToXml(String dccJson) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
-            return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/xml", entity, String.class);
-        } catch (HttpStatusCodeException e) {
-            log.error("Gemimeg Backend XML conversion failed. Status: {}, Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Gemimeg XML conversion failed: " + e.getResponseBodyAsString(), e);
-        } catch (Exception e) {
-            log.error("Failed to connect to Gemimeg Backend at {}: {}", gemimegBackendUrl, e.getMessage());
-            throw new RuntimeException("Could not connect to Gemimeg Backend: " + e.getMessage(), e);
-        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
+        return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/xml", entity, String.class);
     }
 
     private byte[] convertToPdf(String dccJson) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
-            return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/pdf", entity, byte[].class);
-        } catch (HttpStatusCodeException e) {
-            log.error("Gemimeg Backend PDF conversion failed. Status: {}, Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Gemimeg PDF conversion failed: " + e.getResponseBodyAsString(), e);
-        } catch (Exception e) {
-            log.error("Failed to connect to Gemimeg Backend at {}: {}", gemimegBackendUrl, e.getMessage());
-            throw new RuntimeException("Could not connect to Gemimeg Backend: " + e.getMessage(), e);
-        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(dccJson, headers);
+        return restTemplate.postForObject(gemimegBackendUrl + "/api/v1/dcc/xsd/dcc/pdf", entity, byte[].class);
     }
 
     @Transactional

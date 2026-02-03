@@ -9,7 +9,6 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import de.ptb.dcc.dtos.DccValidationResultDto;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -29,7 +28,6 @@ import com.itextpdf.kernel.pdf.PdfReader;
 import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.signatures.*;
 
-@Slf4j
 public class SigningUtils {
 
     private static final String XADES_NS = "http://uri.etsi.org/01903/v1.3.2#";
@@ -42,31 +40,22 @@ public class SigningUtils {
     }
 
     public static PrivateKey loadPrivateKey() throws Exception {
-        log.info("Loading private key from keys/private_key.pem");
         try (InputStream is = new ClassPathResource("keys/private_key.pem").getInputStream()) {
-            if (is == null) throw new FileNotFoundException("Private key file not found in classpath");
             String key = new String(is.readAllBytes())
                     .replace("-----BEGIN PRIVATE KEY-----", "")
                     .replace("-----END PRIVATE KEY-----", "")
                     .replace("-----BEGIN RSA PRIVATE KEY-----", "")
                     .replace("-----END RSA PRIVATE KEY-----", "")
                     .replaceAll("\\s", "");
-            return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(key)));
-        } catch (Exception e) {
-            log.error("Failed to load private key: {}", e.getMessage());
-            throw e;
+            return KeyFactory.getInstance("RSA")
+                    .generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(key)));
         }
     }
 
     public static X509Certificate loadCertificate() throws Exception {
-        log.info("Loading certificate from keys/certificate.pem");
         try (InputStream is = new ClassPathResource("keys/certificate.pem").getInputStream()) {
-            if (is == null) throw new FileNotFoundException("Certificate file not found in classpath");
             CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
             return (X509Certificate) certFactory.generateCertificate(is);
-        } catch (Exception e) {
-            log.error("Failed to load certificate: {}", e.getMessage());
-            throw e;
         }
     }
 
@@ -172,56 +161,61 @@ public class SigningUtils {
             NodeList nodes = doc.getElementsByTagName("*");
             for (int i = 0; i < nodes.getLength(); i++) {
                 Element el = (Element) nodes.item(i);
-                if (el.hasAttribute("Id")) el.setIdAttribute("Id", true);
-                if (el.hasAttribute("id")) el.setIdAttribute("id", true);
+                if (el.hasAttribute("Id"))
+                    el.setIdAttribute("Id", true);
+                if (el.hasAttribute("id"))
+                    el.setIdAttribute("id", true);
             }
 
             Element sigElement = (Element) doc.getElementsByTagNameNS(Constants.SignatureSpecNS, "Signature").item(0);
             if (sigElement == null) {
-                log.error("No ds:Signature element found in XML.");
+                System.err.println("[ERROR] No ds:Signature element found.");
                 return false;
             }
 
             XMLSignature sig = new XMLSignature(sigElement, "");
             X509Certificate cert = sig.getKeyInfo().getX509Certificate();
             if (cert == null) {
-                log.error("No certificate found in ds:KeyInfo.");
+                System.err.println("[ERROR] No certificate found in ds:KeyInfo.");
                 return false;
             }
 
             boolean valid = sig.checkSignatureValue(cert);
             if (valid) {
-                log.info("XML Digital Signature is VALID.");
+                System.out.println("[SUCCESS] XML Digital Signature is VALID.");
             } else {
-                log.warn("XML Digital Signature is INVALID.");
+                System.out.println("[FAILURE] XML Digital Signature is INVALID.");
             }
             return valid;
         } catch (Exception e) {
-            log.error("XML Verification failed: {}", e.getMessage(), e);
+            System.err.println("[ERROR] Verification failed: " + e.getMessage());
             return false;
         }
     }
 
-    public static String signPdf(String inputPath, String outputPath, PrivateKey privateKey, X509Certificate certificate) {
+    public static String signPdf(String inputPath, String outputPath, PrivateKey privateKey,
+            X509Certificate certificate) {
         try {
             PdfReader reader = new PdfReader(inputPath);
             FileOutputStream fos = new FileOutputStream(outputPath);
             IExternalSignature signature = new PrivateKeySignature(privateKey, DigestAlgorithms.SHA256, "BC");
             IExternalDigest digest = new BouncyCastleDigest();
-            java.security.cert.Certificate[] certChain = new java.security.cert.Certificate[]{certificate};
-            com.itextpdf.signatures.PdfSigner signer = new com.itextpdf.signatures.PdfSigner(reader, fos, new com.itextpdf.kernel.pdf.StampingProperties().useAppendMode());
+            java.security.cert.Certificate[] certChain = new java.security.cert.Certificate[] { certificate };
+            com.itextpdf.signatures.PdfSigner signer = new com.itextpdf.signatures.PdfSigner(reader, fos,
+                    new com.itextpdf.kernel.pdf.StampingProperties().useAppendMode());
             signer.setFieldName("Signature1");
             signer.getSignatureAppearance().setReason("DCC Document Signature");
             signer.getSignatureAppearance().setLocation("Physikalisch-Technische Bundesanstalt");
-            signer.signDetached(digest, signature, certChain, null, null, null, 0, com.itextpdf.signatures.PdfSigner.CryptoStandard.CMS);
+            signer.signDetached(digest, signature, certChain, null, null, null, 0,
+                    com.itextpdf.signatures.PdfSigner.CryptoStandard.CMS);
             reader.close();
             fos.close();
-            
+
             // Extract hash from the newly signed file
             DccValidationResultDto result = validateExternalPdf(new File(outputPath));
             return result.getSignatureDetails() != null ? result.getSignatureDetails().getHash() : null;
         } catch (Exception e) {
-            log.error("Failed to sign PDF: {}", e.getMessage(), e);
+            System.err.println("[ERROR] Failed to sign PDF: " + e.getMessage());
             return null;
         }
     }
@@ -239,8 +233,10 @@ public class SigningUtils {
             NodeList nodes = doc.getElementsByTagName("*");
             for (int i = 0; i < nodes.getLength(); i++) {
                 Element el = (Element) nodes.item(i);
-                if (el.hasAttribute("Id")) el.setIdAttribute("Id", true);
-                if (el.hasAttribute("id")) el.setIdAttribute("id", true);
+                if (el.hasAttribute("Id"))
+                    el.setIdAttribute("Id", true);
+                if (el.hasAttribute("id"))
+                    el.setIdAttribute("id", true);
             }
 
             Element sigElement = (Element) doc.getElementsByTagNameNS(Constants.SignatureSpecNS, "Signature").item(0);
@@ -251,7 +247,7 @@ public class SigningUtils {
 
             XMLSignature sig = new XMLSignature(sigElement, "");
             X509Certificate cert = sig.getKeyInfo().getX509Certificate();
-            
+
             boolean valid = sig.checkSignatureValue(cert);
             result.setValid(valid);
 
@@ -259,7 +255,7 @@ public class SigningUtils {
             if (cert != null) {
                 details.setSigner(cert.getSubjectX500Principal().getName());
                 details.setPublicKeyHash(calculatePublicKeyHash(cert.getPublicKey()));
-                details.setPublicKeyMatch(true); 
+                details.setPublicKeyMatch(true);
             }
 
             // Get the hash of the first reference (usually the main document)
@@ -277,7 +273,7 @@ public class SigningUtils {
 
         } catch (Exception e) {
             result.setValid(false);
-            log.error("External XML verification failed: {}", e.getMessage(), e);
+            System.err.println("[ERROR] External XML verification failed: " + e.getMessage());
         }
         return result;
     }
@@ -288,10 +284,10 @@ public class SigningUtils {
         result.setSignatureDetails(details);
 
         try (PdfReader reader = new PdfReader(file);
-             PdfDocument pdfDoc = new PdfDocument(reader)) {
+                PdfDocument pdfDoc = new PdfDocument(reader)) {
             SignatureUtil signUtil = new SignatureUtil(pdfDoc);
             List<String> names = signUtil.getSignatureNames();
-            
+
             if (names.isEmpty()) {
                 result.setValid(false);
                 return result;
@@ -316,9 +312,9 @@ public class SigningUtils {
                 details.setPublicKeyHash(calculatePublicKeyHash(cert.getPublicKey()));
                 details.setPublicKeyMatch(true);
             }
-            
+
             try {
-                // In iText 8, getDigest() might be missing or private. 
+                // In iText 8, getDigest() might be missing or private.
                 // Using reflection to get digestAttr if available, otherwise getEncodedPKCS7
                 byte[] hash = null;
                 try {
@@ -328,7 +324,7 @@ public class SigningUtils {
                 } catch (Exception e) {
                     // Fallback or skip
                 }
-                
+
                 if (hash != null) {
                     details.setHash(Base64.getEncoder().encodeToString(hash));
                 } else {
@@ -339,12 +335,13 @@ public class SigningUtils {
             }
 
             if (pkcs7.getSignDate() != null) {
-                details.setTimestamp(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(pkcs7.getSignDate().getTime()));
+                details.setTimestamp(
+                        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(pkcs7.getSignDate().getTime()));
             }
 
         } catch (Exception e) {
             result.setValid(false);
-            log.error("External PDF verification failed: {}", e.getMessage(), e);
+            System.err.println("[ERROR] External PDF verification failed: " + e.getMessage());
         }
         return result;
     }
