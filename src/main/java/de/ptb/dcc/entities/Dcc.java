@@ -3,7 +3,6 @@ package de.ptb.dcc.entities;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "dcc")
@@ -48,6 +47,12 @@ public class Dcc {
     @Column(name = "dcc_json", columnDefinition = "TEXT", nullable = false)
     private String dccJson;
 
+    @Column(name = "calibration_date")
+    private OffsetDateTime calibrationDate;
+
+    @Column(name = "expiration_date")
+    private OffsetDateTime expirationDate;
+
     @Column(name = "hash_xml", columnDefinition = "TEXT")
     private String hashXml;
 
@@ -89,6 +94,12 @@ public class Dcc {
     public void setPublishedAt(OffsetDateTime publishedAt) { this.publishedAt = publishedAt; }
     public String getDccJson() { return dccJson; }
     public void setDccJson(String dccJson) { this.dccJson = dccJson; }
+
+    public OffsetDateTime getCalibrationDate() { return calibrationDate; }
+    public void setCalibrationDate(OffsetDateTime calibrationDate) { this.calibrationDate = calibrationDate; }
+
+    public OffsetDateTime getExpirationDate() { return expirationDate; }
+    public void setExpirationDate(OffsetDateTime expirationDate) { this.expirationDate = expirationDate; }
 
     public String getHashXml() { return hashXml; }
     public void setHashXml(String hashXml) { this.hashXml = hashXml; }

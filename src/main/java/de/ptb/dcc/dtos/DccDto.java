@@ -16,6 +16,8 @@ public class DccDto {
     private String xmlUrl;
     private String dccJson;
     private OffsetDateTime publishedAt;
+    private OffsetDateTime calibrationDate;
+    private OffsetDateTime expirationDate;
     private String hashXml;
     private String hashPdf;
 
@@ -45,6 +47,12 @@ public class DccDto {
     public void setDccJson(String dccJson) { this.dccJson = dccJson; }
     public OffsetDateTime getPublishedAt() { return publishedAt; }
     public void setPublishedAt(OffsetDateTime publishedAt) { this.publishedAt = publishedAt; }
+
+    public OffsetDateTime getCalibrationDate() { return calibrationDate; }
+    public void setCalibrationDate(OffsetDateTime calibrationDate) { this.calibrationDate = calibrationDate; }
+
+    public OffsetDateTime getExpirationDate() { return expirationDate; }
+    public void setExpirationDate(OffsetDateTime expirationDate) { this.expirationDate = expirationDate; }
 
     public String getHashXml() { return hashXml; }
     public void setHashXml(String hashXml) { this.hashXml = hashXml; }

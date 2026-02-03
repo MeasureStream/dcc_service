@@ -1,5 +1,6 @@
 package de.ptb.dcc.services;
 
+import de.ptb.dcc.dtos.DccUpdateRequest;
 import de.ptb.dcc.dtos.DccValidationResultDto;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.MeasurementUnit;
@@ -131,12 +132,29 @@ public class DccService {
     }
 
     @Transactional
-    public Optional<Dcc> updateDcc(Long dccId, String name, String dccJson) {
+    public Optional<Dcc> updateDcc(Long dccId, DccUpdateRequest request) {
         return dccRepository.findById(dccId).map(dcc -> {
-            if (name != null)
-                dcc.setName(name);
-            if (dccJson != null)
-                dcc.setDccJson(dccJson);
+            if (request.getName() != null)
+                dcc.setName(request.getName());
+            if (request.getDccJson() != null)
+                dcc.setDccJson(request.getDccJson());
+            if (request.getCreatedBy() != null)
+                dcc.setCreatedBy(request.getCreatedBy());
+            if (request.getCalibrationDate() != null)
+                dcc.setCalibrationDate(request.getCalibrationDate());
+            if (request.getExpirationDate() != null)
+                dcc.setExpirationDate(request.getExpirationDate());
+            if (request.getMuId() != null) {
+                if (request.getMuId().isEmpty()) {
+                    dcc.setMu(null);
+                } else {
+                    try {
+                        Long muId = Long.parseLong(request.getMuId());
+                        muRepository.findById(muId).ifPresent(dcc::setMu);
+                    } catch (NumberFormatException e) {
+                    }
+                }
+            }
             return dccRepository.save(dcc);
         });
     }
@@ -272,6 +290,8 @@ public class DccService {
         dto.setXmlUrl(dcc.getXmlUrl());
         dto.setDccJson(dcc.getDccJson());
         dto.setPublishedAt(dcc.getPublishedAt());
+        dto.setCalibrationDate(dcc.getCalibrationDate());
+        dto.setExpirationDate(dcc.getExpirationDate());
         dto.setHashXml(dcc.getHashXml());
         dto.setHashPdf(dcc.getHashPdf());
         dto.setStatus(calculateStatus(dcc));

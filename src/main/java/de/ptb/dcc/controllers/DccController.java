@@ -96,7 +96,7 @@ public class DccController {
 
     @PutMapping("/api/dcc/{dccId}")
     public ResponseEntity<DccDto> updateDcc(@PathVariable Long dccId, @RequestBody DccUpdateRequest request) {
-        return dccService.updateDcc(dccId, request.getName(), request.getDccJson())
+        return dccService.updateDcc(dccId, request)
                 .map(dcc -> ResponseEntity.ok(mapToDto(dcc)))
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -211,6 +211,8 @@ public class DccController {
         dto.setXmlUrl(dcc.getXmlUrl());
         dto.setDccJson(dcc.getDccJson());
         dto.setPublishedAt(dcc.getPublishedAt());
+        dto.setCalibrationDate(dcc.getCalibrationDate());
+        dto.setExpirationDate(dcc.getExpirationDate());
         dto.setHashXml(dcc.getHashXml());
         dto.setHashPdf(dcc.getHashPdf());
         dto.setStatus(calculateStatus(dcc));
