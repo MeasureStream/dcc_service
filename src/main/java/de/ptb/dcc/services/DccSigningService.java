@@ -15,9 +15,11 @@ import java.security.cert.X509Certificate;
 public class DccSigningService {
 
     private final DccRepository dccRepository;
+    private final S3Service s3Service;
 
-    public DccSigningService(DccRepository dccRepository) {
+    public DccSigningService(DccRepository dccRepository, S3Service s3Service) {
         this.dccRepository = dccRepository;
+        this.s3Service = s3Service;
     }
 
     @Transactional
@@ -56,7 +58,22 @@ public class DccSigningService {
             System.out.println("Running final PDF verification...");
             boolean pdfValid = hashPdf != null && signedPdf.exists() && signedPdf.length() > 0;
 
-            // 5. Update DCC entity
+            // 5. Upload to S3
+            if (xmlValid) {
+                System.out.println("Uploading signed XML to S3...");
+                String xmlKey = "dcc-" + dcc.getId() + ".xml";
+                String xmlUrl = s3Service.uploadFile(xmlKey, signedXml, "application/xml");
+                dcc.setXmlUrl(xmlUrl);
+            }
+
+            if (pdfValid) {
+                System.out.println("Uploading signed PDF to S3...");
+                String pdfKey = "dcc-" + dcc.getId() + ".pdf";
+                String pdfUrl = s3Service.uploadFile(pdfKey, signedPdf, "application/pdf");
+                dcc.setPdfUrl(pdfUrl);
+            }
+
+            // 6. Update DCC entity
             dcc.setXmlValid(xmlValid);
             dcc.setPdfValid(pdfValid);
             dcc.setHashXml(hashXml);
