@@ -7,6 +7,7 @@ public class DccDto {
     private String muId;
     private String name;
     private String createdBy;
+    private String createdByName;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
     private String status;
@@ -51,6 +52,14 @@ public class DccDto {
 
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public String getCreatedByName() {
+        return createdByName;
+    }
+
+    public void setCreatedByName(String createdByName) {
+        this.createdByName = createdByName;
     }
 
     public OffsetDateTime getCreatedAt() {

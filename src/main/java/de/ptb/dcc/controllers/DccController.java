@@ -204,6 +204,15 @@ public class DccController {
         }
         dto.setName(dcc.getName());
         dto.setCreatedBy(dcc.getCreatedBy());
+        if (dcc.getUser() != null) {
+            String fullName = dcc.getUser().getName();
+            if (dcc.getUser().getSurname() != null) {
+                fullName += " " + dcc.getUser().getSurname();
+            }
+            dto.setCreatedByName(fullName);
+        } else {
+            dto.setCreatedByName(dcc.getCreatedBy());
+        }
         dto.setCreatedAt(dcc.getCreatedAt());
         dto.setUpdatedAt(dcc.getUpdatedAt());
         dto.setPdfValid(dcc.isPdfValid());
