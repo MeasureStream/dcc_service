@@ -340,7 +340,8 @@ public class DccService {
         if (!dcc.isPdfValid() || !dcc.isXmlValid()) {
             return "RED";
         }
-        if (dcc.getPublishedAt() == null) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (dcc.getExpirationDate() == null || dcc.getExpirationDate().isBefore(now)) {
             return "YELLOW";
         }
         return "GREEN";
