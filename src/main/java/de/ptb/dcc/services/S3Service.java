@@ -42,14 +42,20 @@ public class S3Service {
 
     @PostConstruct
     public void init() {
-        this.s3Client = S3Client.builder()
-                .endpointOverride(URI.create(endpoint))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
-                .region(Region.of(region))
-                .build();
-        
-        ensureBucketExists();
+        try {
+            this.s3Client = S3Client.builder()
+                    .endpointOverride(URI.create(endpoint))
+                    .credentialsProvider(StaticCredentialsProvider.create(
+                            AwsBasicCredentials.create(accessKey, secretKey)))
+                    .region(Region.of(region))
+                    .build();
+            
+            ensureBucketExists();
+            System.out.println("[SUCCESS] S3Service initialized and connected to Garage.");
+        } catch (Exception e) {
+            System.err.println("[WARNING] S3Service initialization failed: " + e.getMessage());
+            System.err.println("DCC files will be stored locally instead of S3.");
+        }
     }
 
     private void ensureBucketExists() {
@@ -65,15 +71,24 @@ public class S3Service {
     }
 
     public String uploadFile(String key, File file, String contentType) {
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(bucket)
-                .key(key)
-                .contentType(contentType)
-                .acl(ObjectCannedACL.PUBLIC_READ)
-                .build();
+        if (s3Client == null) {
+            System.err.println("[ERROR] S3Client not initialized. Cannot upload " + key);
+            return null;
+        }
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .contentType(contentType)
+                    .acl(ObjectCannedACL.PUBLIC_READ)
+                    .build();
 
-        s3Client.putObject(putObjectRequest, RequestBody.fromFile(file));
+            s3Client.putObject(putObjectRequest, RequestBody.fromFile(file));
 
-        return publicUrlBase + "/" + key;
+            return publicUrlBase + "/" + key;
+        } catch (Exception e) {
+            System.err.println("[ERROR] S3 Upload failed for " + key + ": " + e.getMessage());
+            return null;
+        }
     }
 }
