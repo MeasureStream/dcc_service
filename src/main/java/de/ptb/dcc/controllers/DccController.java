@@ -97,10 +97,10 @@ public class DccController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @PostMapping("/api/dcc/{dccId}/validate")
+    @PostMapping(value = "/api/dcc/{dccId}/validate", consumes = { org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_JSON_VALUE, org.springframework.http.MediaType.ALL_VALUE })
     public ResponseEntity<DccDto> validateDcc(
             @PathVariable Long dccId,
-            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestPart(value = "file", required = false) MultipartFile file,
             @RequestParam(value = "fileType", required = false) String fileType) {
 
         // Debug logging to help trace the issue
@@ -115,15 +115,17 @@ public class DccController {
         return ResponseEntity.ok(mapToDto(dcc));
     }
 
-    @PostMapping("/api/dcc/external/validate-xml")
+    @PostMapping(value = "/api/dcc/external/validate-xml", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<DccValidationResultDto> dccExternalValidateXml(
-            @RequestParam("file") MultipartFile file) throws IOException {
+            @RequestPart("file") MultipartFile file) throws IOException {
+        System.out.println("[INFO] External XML validation request received. File: " + (file != null ? file.getOriginalFilename() : "null"));
         return ResponseEntity.ok(dccService.validateExternalXml(file));
     }
 
-    @PostMapping("/api/dcc/external/validate-pdf")
+    @PostMapping(value = "/api/dcc/external/validate-pdf", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<DccValidationResultDto> dccExternalValidatePdf(
-            @RequestParam("file") MultipartFile file) throws IOException {
+            @RequestPart("file") MultipartFile file) throws IOException {
+        System.out.println("[INFO] External PDF validation request received. File: " + (file != null ? file.getOriginalFilename() : "null"));
         return ResponseEntity.ok(dccService.validateExternalPdf(file));
     }
 
