@@ -34,7 +34,6 @@ import java.nio.file.Files;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
-import java.time.Duration;
 import java.util.*;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -272,24 +271,33 @@ public class DccService {
         if (result.xmlValid && result.signedXml != null) {
             System.out.println("Uploading signed XML to S3...");
             String xmlKey = "dcc-" + dcc.getId() + ".xml";
-            String xmlUrl = s3Service.uploadFile(xmlKey, result.signedXml, "application/xml");
-            if (xmlUrl != null) {
-                dcc.setXmlUrl(xmlUrl);
+            String s3Url = s3Service.uploadFile(xmlKey, result.signedXml, "application/xml");
+            if (s3Url != null) {
+                dcc.setXmlUrl("/api/dcc/s3/" + dcc.getId() + "/xml");
             } else {
-                System.err.println("[ERROR] Failed to get URL for XML upload of DCC ID: " + dcc.getId());
+                System.err.println("[ERROR] Failed to upload XML of DCC ID: " + dcc.getId());
             }
         }
 
         if (result.pdfValid && result.signedPdf != null) {
             System.out.println("Uploading signed PDF to S3...");
             String pdfKey = "dcc-" + dcc.getId() + ".pdf";
-            String pdfUrl = s3Service.uploadFile(pdfKey, result.signedPdf, "application/pdf");
-            if (pdfUrl != null) {
-                dcc.setPdfUrl(pdfUrl);
+            String s3Url = s3Service.uploadFile(pdfKey, result.signedPdf, "application/pdf");
+            if (s3Url != null) {
+                dcc.setPdfUrl("/api/dcc/s3/" + dcc.getId() + "/pdf");
             } else {
-                System.err.println("[ERROR] Failed to get URL for PDF upload of DCC ID: " + dcc.getId());
+                System.err.println("[ERROR] Failed to upload PDF of DCC ID: " + dcc.getId());
             }
         }
+    }
+
+    public byte[] downloadS3File(Long dccId, String type) {
+        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
+                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+                .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
+
+        String key = "dcc-" + dccId + (type.equalsIgnoreCase("xml") ? ".xml" : ".pdf");
+        return s3Service.downloadFile(key);
     }
 
     private String convertToXml(String dccJson) {
@@ -403,8 +411,8 @@ public class DccService {
         dto.setUpdatedAt(dcc.getUpdatedAt());
         dto.setPdfValid(dcc.isPdfValid());
         dto.setXmlValid(dcc.isXmlValid());
-        dto.setPdfUrl(getPresignedPdfUrl(dcc));
-        dto.setXmlUrl(getPresignedXmlUrl(dcc));
+        dto.setPdfUrl(dcc.getPdfUrl());
+        dto.setXmlUrl(dcc.getXmlUrl());
         dto.setDccJson(dcc.getDccJson());
         dto.setPublishedAt(dcc.getPublishedAt());
         dto.setCalibrationDate(dcc.getCalibrationDate());
@@ -413,22 +421,6 @@ public class DccService {
         dto.setHashPdf(dcc.getHashPdf());
         dto.setStatus(calculateStatus(dcc));
         return dto;
-    }
-
-    public String getPresignedXmlUrl(Dcc dcc) {
-        if (!dcc.isXmlValid() || dcc.getXmlUrl() == null) {
-            return null;
-        }
-        String key = "dcc-" + dcc.getId() + ".xml";
-        return s3Service.createPresignedGetUrl(key, Duration.ofDays(6));
-    }
-
-    public String getPresignedPdfUrl(Dcc dcc) {
-        if (!dcc.isPdfValid() || dcc.getPdfUrl() == null) {
-            return null;
-        }
-        String key = "dcc-" + dcc.getId() + ".pdf";
-        return s3Service.createPresignedGetUrl(key, Duration.ofDays(6));
     }
 
     private String calculateStatus(Dcc dcc) {

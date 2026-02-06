@@ -181,6 +181,24 @@ public class DccController {
                 .body(content);
     }
 
+    @GetMapping("/api/dcc/s3/{dccId}/{type}")
+    public ResponseEntity<byte[]> downloadFromS3(@PathVariable Long dccId, @PathVariable String type) {
+        byte[] content = dccService.downloadS3File(dccId, type);
+        if (content == null) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        String filename = "dcc-" + dccId + "." + type.toLowerCase();
+        org.springframework.http.MediaType contentType = type.equalsIgnoreCase("xml") 
+            ? org.springframework.http.MediaType.APPLICATION_XML 
+            : org.springframework.http.MediaType.APPLICATION_PDF;
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .contentType(contentType)
+                .body(content);
+    }
+
     private MeasurementUnitDto mapToMuDto(MeasurementUnit mu) {
         MeasurementUnitDto dto = new MeasurementUnitDto();
         dto.setId(mu.getId());
@@ -217,8 +235,8 @@ public class DccController {
         dto.setUpdatedAt(dcc.getUpdatedAt());
         dto.setPdfValid(dcc.isPdfValid());
         dto.setXmlValid(dcc.isXmlValid());
-        dto.setPdfUrl(dccService.getPresignedPdfUrl(dcc));
-        dto.setXmlUrl(dccService.getPresignedXmlUrl(dcc));
+        dto.setPdfUrl(dcc.getPdfUrl());
+        dto.setXmlUrl(dcc.getXmlUrl());
         dto.setDccJson(dcc.getDccJson());
         dto.setPublishedAt(dcc.getPublishedAt());
         dto.setCalibrationDate(dcc.getCalibrationDate());
