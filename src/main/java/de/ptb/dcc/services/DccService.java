@@ -45,17 +45,19 @@ public class DccService {
     private final MeasurementUnitRepository muRepository;
     private final UserRepository userRepository;
     private final DccSigningService signingService;
+    private final S3Service s3Service;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${gemimeg.backend.url}")
     private String gemimegBackendUrl;
 
     public DccService(DccRepository dccRepository, MeasurementUnitRepository muRepository,
-            UserRepository userRepository, DccSigningService signingService) {
+            UserRepository userRepository, DccSigningService signingService, S3Service s3Service) {
         this.dccRepository = dccRepository;
         this.muRepository = muRepository;
         this.userRepository = userRepository;
         this.signingService = signingService;
+        this.s3Service = s3Service;
     }
 
     public Page<Dcc> listDccs(String muId, Boolean template, OffsetDateTime createdFrom, OffsetDateTime createdTo,
@@ -190,9 +192,18 @@ public class DccService {
 
     @Transactional
     public Dcc validateDcc(Long dccId, String fileType) {
+        System.out.println("=== VALIDATE DCC STARTED ===");
+
         Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
                 : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
                 .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
+
+        System.out.println("DCC found in database:");
+        System.out.println("  - Name: " + dcc.getName());
+        System.out.println("  - Current XML Valid: " + dcc.isXmlValid());
+        System.out.println("  - Current PDF Valid: " + dcc.isPdfValid());
+        System.out.println("  - Current XML URL: " + dcc.getXmlUrl());
+        System.out.println("  - Current PDF URL: " + dcc.getPdfUrl());
 
         try {
             System.out.println("=== Starting Validation Chain for DCC ID: " + dccId + " ===");
@@ -200,17 +211,76 @@ public class DccService {
             // 1. Conversion
             System.out.println("Converting JSON to XML/PDF via " + gemimegBackendUrl + "...");
             String xmlContent = convertToXml(dcc.getDccJson());
-            byte[] pdfContent = convertToPdf(dcc.getDccJson());
+            System.out.println("XML Content length: " + (xmlContent != null ? xmlContent.length() : "null") + " characters");
 
-            // 2. Signing and Verification (moved to dedicated service)
-            return signingService.performSigningAndVerification(dcc, xmlContent, pdfContent);
+            byte[] pdfContentBytes = convertToPdf(dcc.getDccJson());
+            System.out.println("PDF Content length: " + (pdfContentBytes != null ? pdfContentBytes.length : "null") + " bytes");
+
+            // 2. Signing and Verification
+            System.out.println("Starting signing and verification process...");
+            DccSigningService.SigningResult signingResult = signingService.performSigningAndVerification(dcc, xmlContent, pdfContentBytes);
+
+            if (signingResult != null) {
+
+
+                // 3. Upload to S3 (New function call)
+                System.out.println("Starting S3 upload process...");
+                uploadToS3(dcc, signingResult);
+
+                System.out.println("After S3 upload:");
+                System.out.println("  - XML URL: " + dcc.getXmlUrl());
+                System.out.println("  - PDF URL: " + dcc.getPdfUrl());
+
+                // 4. Update DCC status from result
+                System.out.println("Updating DCC entity with validation results...");
+                dcc.setXmlValid(signingResult.xmlValid);
+                dcc.setPdfValid(signingResult.pdfValid);
+                dcc.setHashXml(signingResult.hashXml);
+                dcc.setHashPdf(signingResult.hashPdf);
+
+                // 5. Cleanup signed files
+                System.out.println("Cleaning up temporary signed files...");
+                if (signingResult.signedXml != null) {
+                    signingResult.signedXml.delete();
+                    System.out.println("  - Signed XML file deleted");
+                }
+                if (signingResult.signedPdf != null) {
+                    signingResult.signedPdf.delete();
+                    System.out.println("  - Signed PDF file deleted");
+                }
+            } else {
+                System.out.println("ERROR: Signing result is null!");
+            }
+
+            System.out.println("Calculating final status...");
 
         } catch (Exception e) {
             System.err.println("[ERROR] Validation chain failed: " + e.getMessage());
+            System.err.println("Stack trace:");
             e.printStackTrace();
         }
 
-        return dccRepository.save(dcc);
+        System.out.println("Saving DCC to database...");
+        Dcc savedDcc = dccRepository.save(dcc);
+        System.out.println("=== VALIDATE DCC COMPLETED ===");
+
+        return savedDcc;
+    }
+
+    private void uploadToS3(Dcc dcc, DccSigningService.SigningResult result) {
+        if (result.xmlValid && result.signedXml != null) {
+            System.out.println("Uploading signed XML to S3...");
+            String xmlKey = "dcc-" + dcc.getId() + ".xml";
+            String xmlUrl = s3Service.uploadFile(xmlKey, result.signedXml, "application/xml");
+            dcc.setXmlUrl(xmlUrl);
+        }
+
+        if (result.pdfValid && result.signedPdf != null) {
+            System.out.println("Uploading signed PDF to S3...");
+            String pdfKey = "dcc-" + dcc.getId() + ".pdf";
+            String pdfUrl = s3Service.uploadFile(pdfKey, result.signedPdf, "application/pdf");
+            dcc.setPdfUrl(pdfUrl);
+        }
     }
 
     private String convertToXml(String dccJson) {

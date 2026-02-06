@@ -85,7 +85,9 @@ public class S3Service {
 
             s3Client.putObject(putObjectRequest, RequestBody.fromFile(file));
 
-            return publicUrlBase + "/" + key;
+            String publicUrl = publicUrlBase + "/" + key;
+            System.out.println("[SUCCESS] Uploaded " + key + " to S3. Public URL: " + publicUrl);
+            return publicUrl;
         } catch (Exception e) {
             System.err.println("[ERROR] S3 Upload failed for " + key + ": " + e.getMessage());
             return null;
