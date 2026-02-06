@@ -8,6 +8,9 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
@@ -17,6 +20,7 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.net.URI;
+import java.time.Duration;
 
 @Service
 public class S3Service {
@@ -40,11 +44,21 @@ public class S3Service {
     private String region;
 
     private S3Client s3Client;
+    private S3Presigner s3Presigner;
 
     @PostConstruct
     public void init() {
         try {
             this.s3Client = S3Client.builder()
+                    .endpointOverride(URI.create(endpoint))
+                    .credentialsProvider(StaticCredentialsProvider.create(
+                            AwsBasicCredentials.create(accessKey, secretKey)))
+                    .region(Region.of(region))
+                    .serviceConfiguration(S3Configuration.builder()
+                            .pathStyleAccessEnabled(true)
+                            .build())
+                    .build();
+            this.s3Presigner = S3Presigner.builder()
                     .endpointOverride(URI.create(endpoint))
                     .credentialsProvider(StaticCredentialsProvider.create(
                             AwsBasicCredentials.create(accessKey, secretKey)))
@@ -105,6 +119,29 @@ public class S3Service {
             if (e.getMessage() != null && e.getMessage().contains("UnknownHostException")) {
                 System.err.println("  - Troubleshooting: This usually means the endpoint '" + endpoint + "' is not reachable from this container.");
             }
+            return null;
+        }
+    }
+
+    public String createPresignedGetUrl(String key, Duration expiresIn) {
+        if (s3Presigner == null) {
+            System.err.println("[ERROR] S3Presigner not initialized. Cannot presign " + key);
+            return null;
+        }
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build();
+            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                    .signatureDuration(expiresIn)
+                    .getObjectRequest(getObjectRequest)
+                    .build();
+            return s3Presigner.presignGetObject(presignRequest).url().toString();
+        } catch (Exception e) {
+            System.err.println("[ERROR] S3 presign failed for " + key + "!");
+            System.err.println("  - Error Message: " + e.getMessage());
+            System.err.println("  - Cause: " + e.getCause());
             return null;
         }
     }

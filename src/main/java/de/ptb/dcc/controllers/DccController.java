@@ -217,8 +217,8 @@ public class DccController {
         dto.setUpdatedAt(dcc.getUpdatedAt());
         dto.setPdfValid(dcc.isPdfValid());
         dto.setXmlValid(dcc.isXmlValid());
-        dto.setPdfUrl(dcc.getPdfUrl());
-        dto.setXmlUrl(dcc.getXmlUrl());
+        dto.setPdfUrl(dccService.getPresignedPdfUrl(dcc));
+        dto.setXmlUrl(dccService.getPresignedXmlUrl(dcc));
         dto.setDccJson(dcc.getDccJson());
         dto.setPublishedAt(dcc.getPublishedAt());
         dto.setCalibrationDate(dcc.getCalibrationDate());

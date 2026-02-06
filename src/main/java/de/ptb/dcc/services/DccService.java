@@ -34,6 +34,7 @@ import java.nio.file.Files;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
+import java.time.Duration;
 import java.util.*;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -402,8 +403,8 @@ public class DccService {
         dto.setUpdatedAt(dcc.getUpdatedAt());
         dto.setPdfValid(dcc.isPdfValid());
         dto.setXmlValid(dcc.isXmlValid());
-        dto.setPdfUrl(dcc.getPdfUrl());
-        dto.setXmlUrl(dcc.getXmlUrl());
+        dto.setPdfUrl(getPresignedPdfUrl(dcc));
+        dto.setXmlUrl(getPresignedXmlUrl(dcc));
         dto.setDccJson(dcc.getDccJson());
         dto.setPublishedAt(dcc.getPublishedAt());
         dto.setCalibrationDate(dcc.getCalibrationDate());
@@ -412,6 +413,22 @@ public class DccService {
         dto.setHashPdf(dcc.getHashPdf());
         dto.setStatus(calculateStatus(dcc));
         return dto;
+    }
+
+    public String getPresignedXmlUrl(Dcc dcc) {
+        if (!dcc.isXmlValid() || dcc.getXmlUrl() == null) {
+            return null;
+        }
+        String key = "dcc-" + dcc.getId() + ".xml";
+        return s3Service.createPresignedGetUrl(key, Duration.ofDays(6));
+    }
+
+    public String getPresignedPdfUrl(Dcc dcc) {
+        if (!dcc.isPdfValid() || dcc.getPdfUrl() == null) {
+            return null;
+        }
+        String key = "dcc-" + dcc.getId() + ".pdf";
+        return s3Service.createPresignedGetUrl(key, Duration.ofDays(6));
     }
 
     private String calculateStatus(Dcc dcc) {
