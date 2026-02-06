@@ -233,9 +233,14 @@ public class DccController {
         if (!dcc.isPdfValid() || !dcc.isXmlValid()) {
             return "RED";
         }
-        if (dcc.getPublishedAt() == null) {
+
+        if (dcc.getCalibrationDate() != null && dcc.getCalibrationDate().isBefore(OffsetDateTime.now())) {
             return "YELLOW";
         }
+        if (dcc.getPublishedAt() == null) {
+            return "BLUE";
+        }
+
         return "GREEN";
     }
 }
