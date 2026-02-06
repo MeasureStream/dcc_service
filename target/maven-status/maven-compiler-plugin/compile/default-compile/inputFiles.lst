@@ -1,4 +1,5 @@
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\test_java_signing.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\S3Service.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccValidationResultDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\DccRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\MeasurementUnitRepository.java
@@ -11,11 +12,13 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\Measurement
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\test_keys.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\MeasurementUnit.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\User.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\configurations\SecurityConfig.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Dcc.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\DccServiceApplication.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Node.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\verify_xml.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\sign_pdf.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccUpdateRequest.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\UserRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccCreateRequest.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccDto.java

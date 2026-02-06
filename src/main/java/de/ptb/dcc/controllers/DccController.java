@@ -234,10 +234,10 @@ public class DccController {
             return "RED";
         }
 
-        if (dcc.getCalibrationDate() != null && dcc.getCalibrationDate().isBefore(OffsetDateTime.now())) {
+        if (dcc.getExpirationDate() != null && dcc.getExpirationDate().isBefore(OffsetDateTime.now())) {
             return "YELLOW";
         }
-        if (dcc.getPublishedAt() == null) {
+        if (dcc.getPublishedAt() != null) {
             return "BLUE";
         }
 

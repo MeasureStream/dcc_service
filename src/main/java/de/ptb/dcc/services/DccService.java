@@ -272,14 +272,22 @@ public class DccService {
             System.out.println("Uploading signed XML to S3...");
             String xmlKey = "dcc-" + dcc.getId() + ".xml";
             String xmlUrl = s3Service.uploadFile(xmlKey, result.signedXml, "application/xml");
-            dcc.setXmlUrl(xmlUrl);
+            if (xmlUrl != null) {
+                dcc.setXmlUrl(xmlUrl);
+            } else {
+                System.err.println("[ERROR] Failed to get URL for XML upload of DCC ID: " + dcc.getId());
+            }
         }
 
         if (result.pdfValid && result.signedPdf != null) {
             System.out.println("Uploading signed PDF to S3...");
             String pdfKey = "dcc-" + dcc.getId() + ".pdf";
             String pdfUrl = s3Service.uploadFile(pdfKey, result.signedPdf, "application/pdf");
-            dcc.setPdfUrl(pdfUrl);
+            if (pdfUrl != null) {
+                dcc.setPdfUrl(pdfUrl);
+            } else {
+                System.err.println("[ERROR] Failed to get URL for PDF upload of DCC ID: " + dcc.getId());
+            }
         }
     }
 
