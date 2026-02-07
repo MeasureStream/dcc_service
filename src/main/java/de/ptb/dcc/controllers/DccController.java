@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.io.IOException;
 import java.time.OffsetDateTime;
@@ -118,7 +119,8 @@ public class DccController {
     @PostMapping("/api/dcc/external/validate-xml")
     public ResponseEntity<DccValidationResultDto> dccExternalValidateXml(
             @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
-        System.out.println("[INFO] External XML validation request received. File: " + (file != null ? file.getOriginalFilename() : "null"));
+        System.out.println("[INFO] External XML validation request received. File: "
+                + (file != null ? file.getOriginalFilename() : "null"));
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
@@ -128,11 +130,18 @@ public class DccController {
     @PostMapping("/api/dcc/external/validate-pdf")
     public ResponseEntity<DccValidationResultDto> dccExternalValidatePdf(
             @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
-        System.out.println("[INFO] External PDF validation request received. File: " + (file != null ? file.getOriginalFilename() : "null"));
+        System.out.println("[INFO] External PDF validation request received. File: "
+                + (file != null ? file.getOriginalFilename() : "null"));
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.ok(dccService.validateExternalPdf(file));
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<String> handleMissingFilePart(MissingServletRequestPartException ex) {
+        System.err.println("[WARN] Missing multipart part: " + ex.getRequestPartName());
+        return ResponseEntity.badRequest().body("Missing multipart part: " + ex.getRequestPartName());
     }
 
     @GetMapping("/api/dcc/{dccId}/download/signed-xml")
@@ -195,11 +204,11 @@ public class DccController {
         if (content == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         String filename = "dcc-" + dccId + "." + type.toLowerCase();
-        org.springframework.http.MediaType contentType = type.equalsIgnoreCase("xml") 
-            ? org.springframework.http.MediaType.APPLICATION_XML 
-            : org.springframework.http.MediaType.APPLICATION_PDF;
+        org.springframework.http.MediaType contentType = type.equalsIgnoreCase("xml")
+                ? org.springframework.http.MediaType.APPLICATION_XML
+                : org.springframework.http.MediaType.APPLICATION_PDF;
 
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")

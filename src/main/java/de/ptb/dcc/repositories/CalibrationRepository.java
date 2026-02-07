@@ -1,0 +1,14 @@
+package de.ptb.dcc.repositories;
+
+import de.ptb.dcc.entities.Calibration;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface CalibrationRepository extends JpaRepository<Calibration, Long> {
+    List<Calibration> findBySub(String sub);
+    List<Calibration> findByMuId(Long muId);
+    List<Calibration> findByProcessed(boolean processed);
+}

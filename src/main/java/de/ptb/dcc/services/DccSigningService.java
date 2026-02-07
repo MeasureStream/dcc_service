@@ -20,7 +20,8 @@ public class DccSigningService {
         public final File signedXml;
         public final File signedPdf;
 
-        public SigningResult(boolean xmlValid, boolean pdfValid, String hashXml, String hashPdf, File signedXml, File signedPdf) {
+        public SigningResult(boolean xmlValid, boolean pdfValid, String hashXml, String hashPdf, File signedXml,
+                File signedPdf) {
             this.xmlValid = xmlValid;
             this.pdfValid = pdfValid;
             this.hashXml = hashXml;

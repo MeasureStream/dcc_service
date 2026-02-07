@@ -53,7 +53,7 @@ public class S3Service {
                             .pathStyleAccessEnabled(true)
                             .build())
                     .build();
-            
+
             System.out.println("[INFO] S3Service connecting to endpoint: " + endpoint);
             ensureBucketExists();
             System.out.println("[SUCCESS] S3Service initialized and connected to Garage.");
@@ -85,7 +85,8 @@ public class S3Service {
             return null;
         }
         try {
-            System.out.println("[INFO] Uploading file to S3: " + key + " (Bucket: " + bucket + ", Endpoint: " + endpoint + ")");
+            System.out.println(
+                    "[INFO] Uploading file to S3: " + key + " (Bucket: " + bucket + ", Endpoint: " + endpoint + ")");
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucket)
                     .key(key)
@@ -103,7 +104,8 @@ public class S3Service {
             System.err.println("  - Error Message: " + e.getMessage());
             System.err.println("  - Cause: " + e.getCause());
             if (e.getMessage() != null && e.getMessage().contains("UnknownHostException")) {
-                System.err.println("  - Troubleshooting: This usually means the endpoint '" + endpoint + "' is not reachable from this container.");
+                System.err.println("  - Troubleshooting: This usually means the endpoint '" + endpoint
+                        + "' is not reachable from this container.");
             }
             return null;
         }

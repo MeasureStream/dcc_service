@@ -211,17 +211,19 @@ public class DccService {
             // 1. Conversion
             System.out.println("Converting JSON to XML/PDF via " + gemimegBackendUrl + "...");
             String xmlContent = convertToXml(dcc.getDccJson());
-            System.out.println("XML Content length: " + (xmlContent != null ? xmlContent.length() : "null") + " characters");
+            System.out.println(
+                    "XML Content length: " + (xmlContent != null ? xmlContent.length() : "null") + " characters");
 
             byte[] pdfContentBytes = convertToPdf(dcc.getDccJson());
-            System.out.println("PDF Content length: " + (pdfContentBytes != null ? pdfContentBytes.length : "null") + " bytes");
+            System.out.println(
+                    "PDF Content length: " + (pdfContentBytes != null ? pdfContentBytes.length : "null") + " bytes");
 
             // 2. Signing and Verification
             System.out.println("Starting signing and verification process...");
-            DccSigningService.SigningResult signingResult = signingService.performSigningAndVerification(dcc, xmlContent, pdfContentBytes);
+            DccSigningService.SigningResult signingResult = signingService.performSigningAndVerification(dcc,
+                    xmlContent, pdfContentBytes);
 
             if (signingResult != null) {
-
 
                 // 3. Upload to S3 (New function call)
                 System.out.println("Starting S3 upload process...");
