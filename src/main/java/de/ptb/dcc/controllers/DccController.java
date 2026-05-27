@@ -2,7 +2,8 @@ package de.ptb.dcc.controllers;
 
 import de.ptb.dcc.dtos.*;
 import de.ptb.dcc.entities.Dcc;
-import de.ptb.dcc.entities.MeasurementUnit;
+import de.ptb.dcc.entities.Sensor;
+import de.ptb.dcc.entities.User;
 import de.ptb.dcc.services.DccService;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -27,9 +28,13 @@ public class DccController {
         this.dccService = dccService;
     }
 
+    // -------------------------------------------------------------------------
+    // DCCs
+    // -------------------------------------------------------------------------
+
     @GetMapping("/api/dcc")
     public ResponseEntity<List<DccDto>> listDccs(
-            @RequestParam(required = false) String muId,
+            @RequestParam(required = false) String sensorId,
             @RequestParam(required = false, defaultValue = "false") boolean template,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo,
@@ -38,63 +43,30 @@ public class DccController {
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(defaultValue = "0") int offset) {
 
-        Page<Dcc> page = dccService.listDccs(muId, template, createdFrom, createdTo, orderBy, orderDir, limit, offset);
+        Page<Dcc> page = dccService.listDccs(sensorId, template, createdFrom, createdTo, orderBy, orderDir, limit, offset);
         List<DccDto> dtos = page.getContent().stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(dtos);
-    }
-
-    @GetMapping("/api/mus")
-    public ResponseEntity<List<MeasurementUnitDto>> listMus(
-            @RequestParam(required = false, defaultValue = "false") boolean all) {
-        List<MeasurementUnit> mus = dccService.listMus(all);
-        List<MeasurementUnitDto> dtos = mus.stream()
-                .map(this::mapToMuDto)
+                .map(dccService::mapToDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
-    }
-
-    @GetMapping("/api/public/mus")
-    public ResponseEntity<List<MeasurementUnitDto>> listPublicMus(
-            @RequestParam(required = false, defaultValue = "false") boolean all) {
-        List<MeasurementUnit> mus = dccService.listPublicMus(all);
-        List<MeasurementUnitDto> dtos = mus.stream()
-                .map(this::mapToMuDto)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(dtos);
-    }
-
-    @GetMapping("/api/public/dcc/{muId}")
-    public ResponseEntity<DccDto> getPublicDcc(@PathVariable Long muId) {
-        return dccService.getPublishedDccByMuId(muId)
-                .map(dcc -> ResponseEntity.ok(mapToDto(dcc)))
-                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/api/dcc")
     public ResponseEntity<DccDto> createDcc(@RequestBody DccCreateRequest request) {
-        Dcc dcc = dccService.createDcc(request.getMuId(), request.getName(), request.getDccJson());
-        return ResponseEntity.status(HttpStatus.CREATED).body(mapToDto(dcc));
+        Dcc dcc = dccService.createDcc(request.getSensorId(), request.getName(), request.getDccJson());
+        return ResponseEntity.status(HttpStatus.CREATED).body(dccService.mapToDto(dcc));
     }
 
     @GetMapping("/api/dcc/{dccId}")
     public ResponseEntity<DccDto> getDcc(@PathVariable Long dccId) {
         return dccService.getDcc(dccId)
-                .map(dcc -> ResponseEntity.ok(mapToDto(dcc)))
+                .map(dcc -> ResponseEntity.ok(dccService.mapToDto(dcc)))
                 .orElse(ResponseEntity.notFound().build());
-    }
-
-    @GetMapping("/verify-token")
-    public ResponseEntity<String> verifyToken() {
-        return ResponseEntity.ok("Token is valid");
     }
 
     @PutMapping("/api/dcc/{dccId}")
     public ResponseEntity<DccDto> updateDcc(@PathVariable Long dccId, @RequestBody DccUpdateRequest request) {
         return dccService.updateDcc(dccId, request)
-                .map(dcc -> ResponseEntity.ok(mapToDto(dcc)))
+                .map(dcc -> ResponseEntity.ok(dccService.mapToDto(dcc)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -104,44 +76,38 @@ public class DccController {
             @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(value = "fileType", required = false) String fileType) {
 
-        // Debug logging to help trace the issue
-        System.out.println("Validate request for ID: " + dccId);
-        System.out.println("FileType received: " + fileType);
+        System.out.println("Validate request for DCC ID: " + dccId + ", fileType: " + fileType);
 
         if (fileType == null || fileType.isEmpty()) {
             return ResponseEntity.badRequest().body(null);
         }
 
         Dcc dcc = dccService.validateDcc(dccId, fileType);
-        return ResponseEntity.ok(mapToDto(dcc));
+        return ResponseEntity.ok(dccService.mapToDto(dcc));
     }
 
-    @PostMapping("/api/dcc/external/validate-xml")
-    public ResponseEntity<DccValidationResultDto> dccExternalValidateXml(
-            @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
-        System.out.println("[INFO] External XML validation request received. File: "
-                + (file != null ? file.getOriginalFilename() : "null"));
-        if (file == null || file.isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
-        return ResponseEntity.ok(dccService.validateExternalXml(file));
+    @PostMapping("/api/dcc/{dccId}/json")
+    public ResponseEntity<DccDto> updateDccJson(@PathVariable Long dccId, @RequestBody String dccJson) {
+        Dcc dcc = dccService.updateDccJson(dccId, dccJson);
+        return ResponseEntity.ok(dccService.mapToDto(dcc));
     }
 
-    @PostMapping("/api/dcc/external/validate-pdf")
-    public ResponseEntity<DccValidationResultDto> dccExternalValidatePdf(
-            @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
-        System.out.println("[INFO] External PDF validation request received. File: "
-                + (file != null ? file.getOriginalFilename() : "null"));
-        if (file == null || file.isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
-        return ResponseEntity.ok(dccService.validateExternalPdf(file));
+    @PostMapping("/api/dcc/{dccId}/publish")
+    public ResponseEntity<DccDto> publishDcc(@PathVariable Long dccId) {
+        Dcc dcc = dccService.publishDcc(dccId);
+        return ResponseEntity.ok(dccService.mapToDto(dcc));
     }
 
-    @ExceptionHandler(MissingServletRequestPartException.class)
-    public ResponseEntity<String> handleMissingFilePart(MissingServletRequestPartException ex) {
-        System.err.println("[WARN] Missing multipart part: " + ex.getRequestPartName());
-        return ResponseEntity.badRequest().body("Missing multipart part: " + ex.getRequestPartName());
+    @PostMapping("/api/dcc/{dccId}/unpublish")
+    public ResponseEntity<DccDto> unpublishDcc(@PathVariable Long dccId) {
+        Dcc dcc = dccService.unpublishDcc(dccId);
+        return ResponseEntity.ok(dccService.mapToDto(dcc));
+    }
+
+    @DeleteMapping("/api/dcc/{dccId}")
+    public ResponseEntity<Void> deleteDcc(@PathVariable Long dccId) {
+        dccService.deleteDcc(dccId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/api/dcc/{dccId}/download/signed-xml")
@@ -162,32 +128,6 @@ public class DccController {
                 .body(content);
     }
 
-    @PostMapping("/api/dcc/{dccId}/json")
-    public ResponseEntity<DccDto> updateDccJson(
-            @PathVariable Long dccId,
-            @RequestBody String dccJson) {
-        Dcc dcc = dccService.updateDccJson(dccId, dccJson);
-        return ResponseEntity.ok(mapToDto(dcc));
-    }
-
-    @PostMapping("/api/dcc/{dccId}/publish")
-    public ResponseEntity<DccDto> publishDcc(@PathVariable Long dccId) {
-        Dcc dcc = dccService.publishDcc(dccId);
-        return ResponseEntity.ok(mapToDto(dcc));
-    }
-
-    @PostMapping("/api/dcc/{dccId}/unpublish")
-    public ResponseEntity<DccDto> unpublishDcc(@PathVariable Long dccId) {
-        Dcc dcc = dccService.unpublishDcc(dccId);
-        return ResponseEntity.ok(mapToDto(dcc));
-    }
-
-    @DeleteMapping("/api/dcc/{dccId}")
-    public ResponseEntity<Void> deleteDcc(@PathVariable Long dccId) {
-        dccService.deleteDcc(dccId);
-        return ResponseEntity.noContent().build();
-    }
-
     @GetMapping("/api/dcc/{dccId}/download")
     public ResponseEntity<byte[]> downloadDcc(@PathVariable Long dccId,
             @RequestParam(defaultValue = "PDF") String fileType) {
@@ -201,9 +141,7 @@ public class DccController {
     @GetMapping("/api/dcc/s3/{dccId}/{type}")
     public ResponseEntity<byte[]> downloadFromS3(@PathVariable Long dccId, @PathVariable String type) {
         byte[] content = dccService.downloadS3File(dccId, type);
-        if (content == null) {
-            return ResponseEntity.notFound().build();
-        }
+        if (content == null) return ResponseEntity.notFound().build();
 
         String filename = "dcc-" + dccId + "." + type.toLowerCase();
         org.springframework.http.MediaType contentType = type.equalsIgnoreCase("xml")
@@ -216,66 +154,95 @@ public class DccController {
                 .body(content);
     }
 
-    private MeasurementUnitDto mapToMuDto(MeasurementUnit mu) {
-        MeasurementUnitDto dto = new MeasurementUnitDto();
-        dto.setId(mu.getId());
-        dto.setType(mu.getType());
-        dto.setMeasuresUnit(mu.getMeasuresUnit());
-        dto.setNetworkId(mu.getNetworkId());
-        if (mu.getNode() != null) {
-            dto.setNodeId(mu.getNode().getId());
-        }
-        if (mu.getUser() != null) {
-            dto.setOwnerId(mu.getUser().getUserId());
-        }
-        return dto;
+    // -------------------------------------------------------------------------
+    // SENSORS — lista sensori disponibili per linkare un DCC
+    // admin: tutti, utente normale: solo quelli delle proprie CU
+    // -------------------------------------------------------------------------
+
+    @GetMapping("/api/sensors")
+    public ResponseEntity<List<SensorDto>> listSensors() {
+        List<SensorDto> dtos = dccService.listSensors().stream()
+                .map(this::mapToSensorDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
-    private DccDto mapToDto(Dcc dcc) {
-        DccDto dto = new DccDto();
-        dto.setId(dcc.getId());
-        if (dcc.getMu() != null) {
-            dto.setMuId(dcc.getMu().getId().toString());
-        }
-        dto.setName(dcc.getName());
-        dto.setCreatedBy(dcc.getCreatedBy());
-        if (dcc.getUser() != null) {
-            String fullName = dcc.getUser().getName();
-            if (dcc.getUser().getSurname() != null) {
-                fullName += " " + dcc.getUser().getSurname();
+    @GetMapping("/api/public/sensors")
+    public ResponseEntity<List<SensorDto>> listPublicSensors() {
+        List<SensorDto> dtos = dccService.listPublicSensors().stream()
+                .map(this::mapToSensorDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/api/public/dcc/{sensorId}")
+    public ResponseEntity<DccDto> getPublicDcc(@PathVariable Long sensorId) {
+        return dccService.getPublishedDccBySensorId(sensorId)
+                .map(dcc -> ResponseEntity.ok(dccService.mapToDto(dcc)))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // -------------------------------------------------------------------------
+    // EXTERNAL VALIDATION
+    // -------------------------------------------------------------------------
+
+    @PostMapping("/api/dcc/external/validate-xml")
+    public ResponseEntity<DccValidationResultDto> dccExternalValidateXml(
+            @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
+        System.out.println("[INFO] External XML validation: " + (file != null ? file.getOriginalFilename() : "null"));
+        if (file == null || file.isEmpty()) return ResponseEntity.badRequest().build();
+        return ResponseEntity.ok(dccService.validateExternalXml(file));
+    }
+
+    @PostMapping("/api/dcc/external/validate-pdf")
+    public ResponseEntity<DccValidationResultDto> dccExternalValidatePdf(
+            @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
+        System.out.println("[INFO] External PDF validation: " + (file != null ? file.getOriginalFilename() : "null"));
+        if (file == null || file.isEmpty()) return ResponseEntity.badRequest().build();
+        return ResponseEntity.ok(dccService.validateExternalPdf(file));
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<String> handleMissingFilePart(MissingServletRequestPartException ex) {
+        System.err.println("[WARN] Missing multipart part: " + ex.getRequestPartName());
+        return ResponseEntity.badRequest().body("Missing multipart part: " + ex.getRequestPartName());
+    }
+
+    // -------------------------------------------------------------------------
+    // MISC
+    // -------------------------------------------------------------------------
+
+    @GetMapping("/verify-token")
+    public ResponseEntity<String> verifyToken() {
+        return ResponseEntity.ok("Token is valid");
+    }
+
+    // -------------------------------------------------------------------------
+    // MAPPING HELPERS
+    // -------------------------------------------------------------------------
+
+    private SensorDto mapToSensorDto(Sensor sensor) {
+        SensorDto dto = new SensorDto();
+        dto.setId(sensor.getId());
+        dto.setModelName(sensor.getModelName());
+        dto.setSensorIndex(sensor.getSensorIndex());
+        if (sensor.getMeasurementUnit() != null) {
+            dto.setMuExtendedId(sensor.getMeasurementUnit().getExtendedId());
+            if (sensor.getMeasurementUnit().getControlUnit() != null) {
+                dto.setCuDevEui(sensor.getMeasurementUnit().getControlUnit().getDevEui());
             }
-            dto.setCreatedByName(fullName);
-        } else {
-            dto.setCreatedByName(dcc.getCreatedBy());
         }
-        dto.setCreatedAt(dcc.getCreatedAt());
-        dto.setUpdatedAt(dcc.getUpdatedAt());
-        dto.setPdfValid(dcc.isPdfValid());
-        dto.setXmlValid(dcc.isXmlValid());
-        dto.setPdfUrl(dcc.getPdfUrl());
-        dto.setXmlUrl(dcc.getXmlUrl());
-        dto.setDccJson(dcc.getDccJson());
-        dto.setPublishedAt(dcc.getPublishedAt());
-        dto.setCalibrationDate(dcc.getCalibrationDate());
-        dto.setExpirationDate(dcc.getExpirationDate());
-        dto.setHashXml(dcc.getHashXml());
-        dto.setHashPdf(dcc.getHashPdf());
-        dto.setStatus(calculateStatus(dcc));
+        User owner = sensor.getOwner();
+        if (owner != null) {
+            dto.setOwnerId(owner.getUserId());
+        }
         return dto;
     }
 
     private String calculateStatus(Dcc dcc) {
-        if (!dcc.isPdfValid() || !dcc.isXmlValid()) {
-            return "RED";
-        }
-
-        if (dcc.getExpirationDate() != null && dcc.getExpirationDate().isBefore(OffsetDateTime.now())) {
-            return "YELLOW";
-        }
-        if (dcc.getPublishedAt() != null) {
-            return "BLUE";
-        }
-
+        if (!dcc.isPdfValid() || !dcc.isXmlValid()) return "RED";
+        if (dcc.getExpirationDate() != null && dcc.getExpirationDate().isBefore(OffsetDateTime.now())) return "YELLOW";
+        if (dcc.getPublishedAt() != null) return "BLUE";
         return "GREEN";
     }
 }

@@ -2,7 +2,14 @@ package de.ptb.dcc.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import java.util.List;
 
+/**
+ * Entità passiva (sola lettura per dcc_service).
+ * Specchio di MeasurementUnit in sensor-manager.
+ * extendedId = EUID hardware (corrisponde a MeasurementUnit.extendedId in sensor-manager).
+ * user_user_id è nullable: null se la CU parent non è stata ancora reclamata.
+ */
 @Entity
 @Table(name = "measurement_unit")
 public class MeasurementUnit {
@@ -11,82 +18,40 @@ public class MeasurementUnit {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;
 
-    @Column(nullable = false)
-    private String type;
+    // EUID hardware univoco (= extendedId in sensor-manager)
+    @Column(name = "extended_id", unique = true)
+    private Long extendedId;
 
-    @Column(name = "measures_unit", nullable = false)
-    private String measuresUnit;
+    // indirizzo locale sul bus della CU
+    private Integer localId;
 
-    @Column(name = "network_id", unique = true)
-    private Long networkId;
-
-    @ManyToOne
-    @JoinColumn(name = "node_id")
-    @JsonIgnore
-    private Node node;
+    // numero modello che determina il set di sensori (es. 1, 100)
+    private Integer model;
 
     @ManyToOne
-    @JoinColumn(name = "user_user_id", referencedColumnName = "user_id")
+    @JoinColumn(name = "control_unit_id", nullable = true)
     @JsonIgnore
-    private User user;
+    private ControlUnit controlUnit;
 
-    @OneToMany(mappedBy = "mu", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "measurementUnit", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
-    private java.util.List<Dcc> dccs;
+    private List<Sensor> sensors;
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public Long getExtendedId() { return extendedId; }
+    public void setExtendedId(Long extendedId) { this.extendedId = extendedId; }
 
-    public String getType() {
-        return type;
-    }
+    public Integer getLocalId() { return localId; }
+    public void setLocalId(Integer localId) { this.localId = localId; }
 
-    public void setType(String type) {
-        this.type = type;
-    }
+    public Integer getModel() { return model; }
+    public void setModel(Integer model) { this.model = model; }
 
-    public String getMeasuresUnit() {
-        return measuresUnit;
-    }
+    public ControlUnit getControlUnit() { return controlUnit; }
+    public void setControlUnit(ControlUnit controlUnit) { this.controlUnit = controlUnit; }
 
-    public void setMeasuresUnit(String measuresUnit) {
-        this.measuresUnit = measuresUnit;
-    }
-
-    public Long getNetworkId() {
-        return networkId;
-    }
-
-    public void setNetworkId(Long networkId) {
-        this.networkId = networkId;
-    }
-
-    public Node getNode() {
-        return node;
-    }
-
-    public void setNode(Node node) {
-        this.node = node;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public void setUser(User user) {
-        this.user = user;
-    }
-
-    public java.util.List<Dcc> getDccs() {
-        return dccs;
-    }
-
-    public void setDccs(java.util.List<Dcc> dccs) {
-        this.dccs = dccs;
-    }
+    public List<Sensor> getSensors() { return sensors; }
+    public void setSensors(List<Sensor> sensors) { this.sensors = sensors; }
 }

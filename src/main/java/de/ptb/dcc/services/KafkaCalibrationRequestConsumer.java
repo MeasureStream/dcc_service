@@ -163,7 +163,7 @@ public class KafkaCalibrationRequestConsumer {
         kafkaTemplate.send(responseTopic, outputJson)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
-                        log.error("[{}] Failed to send response to {}", calibrationId, RESPONSE_TOPIC, ex);
+                        log.error("[{}] Failed to send response to {}", calibrationId, responseTopic, ex);
                     } else {
                         log.info("[{}] Response sent → topic={} partition={} offset={}",
                                 calibrationId,

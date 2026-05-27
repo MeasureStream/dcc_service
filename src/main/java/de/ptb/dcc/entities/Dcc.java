@@ -16,9 +16,9 @@ public class Dcc {
     private String name;
 
     @ManyToOne
-    @JoinColumn(name = "mu_id", referencedColumnName = "id")
+    @JoinColumn(name = "sensor_id", referencedColumnName = "id")
     @JsonIgnore
-    private MeasurementUnit mu;
+    private Sensor sensor;
 
     @ManyToOne
     @JoinColumn(name = "user_user_id", referencedColumnName = "user_id")
@@ -99,12 +99,12 @@ public class Dcc {
         this.name = name;
     }
 
-    public MeasurementUnit getMu() {
-        return mu;
+    public Sensor getSensor() {
+        return sensor;
     }
 
-    public void setMu(MeasurementUnit mu) {
-        this.mu = mu;
+    public void setSensor(Sensor sensor) {
+        this.sensor = sensor;
     }
 
     public String getCreatedBy() {

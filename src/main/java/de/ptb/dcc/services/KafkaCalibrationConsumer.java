@@ -23,6 +23,7 @@ public class KafkaCalibrationConsumer {
 
     @KafkaListener(topics = "calibrations")
     public void listen(String message) {
+        logger.debug("RAW calibration message: {}", message);
         logger.info("Received calibration message: {}", message);
         try {
             JsonNode root = objectMapper.readTree(message);

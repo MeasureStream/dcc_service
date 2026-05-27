@@ -1,9 +1,11 @@
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\ControlUnit.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\CalibratorRequestRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\S3Service.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccValidationResultDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\DccRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\MeasurementUnitRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\DccSigningService.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\SensorDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\DccService.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Calibration.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\controllers\DccController.java
@@ -12,13 +14,16 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Measure
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\CalibrationRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\configurations\SecurityConfig.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Dcc.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\configurations\DebugAuthFilter.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Sensor.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\DccServiceApplication.java
-C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Node.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\KafkaCalibrationConsumer.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\sign_pdf.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccUpdateRequest.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\UserRepository.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\SensorRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\test_java_signing.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\ControlUnitRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\CalibratorRequest.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\sign_xml.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\utils\SigningUtils.java
@@ -28,3 +33,4 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\User.ja
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\verify_xml.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccCreateRequest.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccDto.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\configurations\SecurityConfigDebug.java

@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 @Configuration
+@org.springframework.context.annotation.Profile("!auth-debug")
 public class SecurityConfig {
 
     @Bean

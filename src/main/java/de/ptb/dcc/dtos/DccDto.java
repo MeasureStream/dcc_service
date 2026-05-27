@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 
 public class DccDto {
     private Long id;
-    private String muId;
+    private Long sensorId;
     private String name;
     private String createdBy;
     private String createdByName;
@@ -22,147 +22,57 @@ public class DccDto {
     private String hashXml;
     private String hashPdf;
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public Long getSensorId() { return sensorId; }
+    public void setSensorId(Long sensorId) { this.sensorId = sensorId; }
 
-    public String getMuId() {
-        return muId;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public void setMuId(String muId) {
-        this.muId = muId;
-    }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
 
-    public String getName() {
-        return name;
-    }
+    public String getCreatedByName() { return createdByName; }
+    public void setCreatedByName(String createdByName) { this.createdByName = createdByName; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
 
-    public String getCreatedBy() {
-        return createdBy;
-    }
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
-    }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public String getCreatedByName() {
-        return createdByName;
-    }
+    public boolean isPdfValid() { return pdfValid; }
+    public void setPdfValid(boolean pdfValid) { this.pdfValid = pdfValid; }
 
-    public void setCreatedByName(String createdByName) {
-        this.createdByName = createdByName;
-    }
+    public boolean isXmlValid() { return xmlValid; }
+    public void setXmlValid(boolean xmlValid) { this.xmlValid = xmlValid; }
 
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
+    public String getPdfUrl() { return pdfUrl; }
+    public void setPdfUrl(String pdfUrl) { this.pdfUrl = pdfUrl; }
 
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
+    public String getXmlUrl() { return xmlUrl; }
+    public void setXmlUrl(String xmlUrl) { this.xmlUrl = xmlUrl; }
 
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
+    public String getDccJson() { return dccJson; }
+    public void setDccJson(String dccJson) { this.dccJson = dccJson; }
 
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
+    public OffsetDateTime getPublishedAt() { return publishedAt; }
+    public void setPublishedAt(OffsetDateTime publishedAt) { this.publishedAt = publishedAt; }
 
-    public String getStatus() {
-        return status;
-    }
+    public OffsetDateTime getCalibrationDate() { return calibrationDate; }
+    public void setCalibrationDate(OffsetDateTime calibrationDate) { this.calibrationDate = calibrationDate; }
 
-    public void setStatus(String status) {
-        this.status = status;
-    }
+    public OffsetDateTime getExpirationDate() { return expirationDate; }
+    public void setExpirationDate(OffsetDateTime expirationDate) { this.expirationDate = expirationDate; }
 
-    public boolean isPdfValid() {
-        return pdfValid;
-    }
+    public String getHashXml() { return hashXml; }
+    public void setHashXml(String hashXml) { this.hashXml = hashXml; }
 
-    public void setPdfValid(boolean pdfValid) {
-        this.pdfValid = pdfValid;
-    }
-
-    public boolean isXmlValid() {
-        return xmlValid;
-    }
-
-    public void setXmlValid(boolean xmlValid) {
-        this.xmlValid = xmlValid;
-    }
-
-    public String getPdfUrl() {
-        return pdfUrl;
-    }
-
-    public void setPdfUrl(String pdfUrl) {
-        this.pdfUrl = pdfUrl;
-    }
-
-    public String getXmlUrl() {
-        return xmlUrl;
-    }
-
-    public void setXmlUrl(String xmlUrl) {
-        this.xmlUrl = xmlUrl;
-    }
-
-    public String getDccJson() {
-        return dccJson;
-    }
-
-    public void setDccJson(String dccJson) {
-        this.dccJson = dccJson;
-    }
-
-    public OffsetDateTime getPublishedAt() {
-        return publishedAt;
-    }
-
-    public void setPublishedAt(OffsetDateTime publishedAt) {
-        this.publishedAt = publishedAt;
-    }
-
-    public OffsetDateTime getCalibrationDate() {
-        return calibrationDate;
-    }
-
-    public void setCalibrationDate(OffsetDateTime calibrationDate) {
-        this.calibrationDate = calibrationDate;
-    }
-
-    public OffsetDateTime getExpirationDate() {
-        return expirationDate;
-    }
-
-    public void setExpirationDate(OffsetDateTime expirationDate) {
-        this.expirationDate = expirationDate;
-    }
-
-    public String getHashXml() {
-        return hashXml;
-    }
-
-    public void setHashXml(String hashXml) {
-        this.hashXml = hashXml;
-    }
-
-    public String getHashPdf() {
-        return hashPdf;
-    }
-
-    public void setHashPdf(String hashPdf) {
-        this.hashPdf = hashPdf;
-    }
+    public String getHashPdf() { return hashPdf; }
+    public void setHashPdf(String hashPdf) { this.hashPdf = hashPdf; }
 }
