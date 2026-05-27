@@ -8,6 +8,7 @@ import de.ptb.dcc.entities.CalibratorRequest;
 import de.ptb.dcc.repositories.CalibratorRequestRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -19,13 +20,19 @@ import org.springframework.stereotype.Service;
  *
  * The calibration_request table is created automatically by Hibernate
  * (spring.jpa.hibernate.ddl-auto=update).
+ *
+ * Kafka wiring (configured in application.properties):
+ *   Broker    : ${spring.kafka.bootstrap-servers}
+ *   CONSUMING : ${calibration.topic.request}   (group: ${calibration.consumer.group})
+ *   PRODUCING : ${calibration.topic.response}
  */
 @Service
 public class KafkaCalibrationRequestConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaCalibrationRequestConsumer.class);
 
-    private static final String RESPONSE_TOPIC = "calibration.response";
+    @Value("${calibration.topic.response:calibration.response}")
+    private String responseTopic;
 
     private final CalibratorRequestRepository repository;
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -41,7 +48,11 @@ public class KafkaCalibrationRequestConsumer {
 
     // ── Kafka listener ───────────────────────────────────────────────────────
 
-    @KafkaListener(topics = "calibration.request", groupId = "dcc-service-calibration-request")
+    @KafkaListener(
+        topics     = "${calibration.topic.request:calibration.request}",
+        groupId    = "${calibration.consumer.group:dcc-service-calibration-request}",
+        id         = "calibration-request-listener"
+    )
     public void listen(String message) {
         log.info("[calibration.request] Received message ({} chars)", message.length());
 
@@ -149,7 +160,7 @@ public class KafkaCalibrationRequestConsumer {
         log.info("[{}] Marked as processed in DB", calibrationId);
 
         // ── Publish to calibration.response ───────────────────────────────────
-        kafkaTemplate.send(RESPONSE_TOPIC, outputJson)
+        kafkaTemplate.send(responseTopic, outputJson)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
                         log.error("[{}] Failed to send response to {}", calibrationId, RESPONSE_TOPIC, ex);
