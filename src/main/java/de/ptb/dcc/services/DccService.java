@@ -476,6 +476,7 @@ public class DccService {
         dto.setExpirationDate(dcc.getExpirationDate());
         dto.setHashXml(dcc.getHashXml());
         dto.setHashPdf(dcc.getHashPdf());
+        dto.setCalibrationRequestId(dcc.getCalibrationRequestId());
         dto.setStatus(calculateStatus(dcc));
         return dto;
     }

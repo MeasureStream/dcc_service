@@ -72,6 +72,10 @@ public class Dcc {
     @Column(name = "hash_pdf", columnDefinition = "TEXT")
     private String hashPdf;
 
+    /** FK alla calibration_request che ha generato questo DCC (nullable) */
+    @Column(name = "calibration_request_id")
+    private Long calibrationRequestId;
+
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
@@ -209,5 +213,13 @@ public class Dcc {
 
     public void setHashPdf(String hashPdf) {
         this.hashPdf = hashPdf;
+    }
+
+    public Long getCalibrationRequestId() {
+        return calibrationRequestId;
+    }
+
+    public void setCalibrationRequestId(Long calibrationRequestId) {
+        this.calibrationRequestId = calibrationRequestId;
     }
 }

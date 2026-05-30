@@ -21,6 +21,7 @@ public class DccDto {
     private OffsetDateTime expirationDate;
     private String hashXml;
     private String hashPdf;
+    private Long calibrationRequestId;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -75,4 +76,7 @@ public class DccDto {
 
     public String getHashPdf() { return hashPdf; }
     public void setHashPdf(String hashPdf) { this.hashPdf = hashPdf; }
+
+    public Long getCalibrationRequestId() { return calibrationRequestId; }
+    public void setCalibrationRequestId(Long calibrationRequestId) { this.calibrationRequestId = calibrationRequestId; }
 }

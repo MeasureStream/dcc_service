@@ -11,4 +11,5 @@ public interface CalibrationRepository extends JpaRepository<Calibration, Long> 
     List<Calibration> findBySub(String sub);
     List<Calibration> findByMuId(Long muId);
     List<Calibration> findByProcessed(boolean processed);
+    java.util.Optional<Calibration> findByCalibrationRequestId(Long calibrationRequestId);
 }
