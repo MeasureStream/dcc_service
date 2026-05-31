@@ -4,7 +4,11 @@ import de.ptb.dcc.dtos.*;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.Sensor;
 import de.ptb.dcc.entities.User;
+import de.ptb.dcc.services.CalibrationRunService;
 import de.ptb.dcc.services.DccService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -14,18 +18,34 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
 @CrossOrigin(origins = "*")
 public class DccController {
 
-    private final DccService dccService;
+    private static final Logger log = LoggerFactory.getLogger(DccController.class);
 
-    public DccController(DccService dccService) {
+    private final DccService dccService;
+    private final CalibrationRunService calibrationRunService;
+
+    @Value("${python.cmd:python}")
+    private String pythonCmd;
+
+    @Value("${calibration.script.path:}")
+    private String calibrationScriptPath;
+
+    @Value("${calibration.models.path:}")
+    private String calibrationModelsPath;
+
+    public DccController(DccService dccService, CalibrationRunService calibrationRunService) {
         this.dccService = dccService;
+        this.calibrationRunService = calibrationRunService;
     }
 
     // -------------------------------------------------------------------------
@@ -52,7 +72,12 @@ public class DccController {
 
     @PostMapping("/api/dcc")
     public ResponseEntity<DccDto> createDcc(@RequestBody DccCreateRequest request) {
-        Dcc dcc = dccService.createDcc(request.getSensorId(), request.getName(), request.getDccJson());
+        Dcc dcc = dccService.createDcc(
+                request.getSensorId(),
+                request.getName(),
+                request.getDccJson(),
+                request.getCalibrationRequestId()
+        );
         return ResponseEntity.status(HttpStatus.CREATED).body(dccService.mapToDto(dcc));
     }
 
@@ -200,6 +225,153 @@ public class DccController {
         System.out.println("[INFO] External PDF validation: " + (file != null ? file.getOriginalFilename() : "null"));
         if (file == null || file.isEmpty()) return ResponseEntity.badRequest().build();
         return ResponseEntity.ok(dccService.validateExternalPdf(file));
+    }
+
+    /**
+     * POST /api/dcc/external/verify-conformity
+     *
+     * Accepts a DCC XML file upload + form parameters (sensor template name, mae,
+     * pfa-threshold, u-ref).  Runs verify_dcc_conformity.py in a temp directory,
+     * captures stdout and any generated PNG charts, and returns everything in the
+     * response body (no DB persistence, temp dir is deleted after the call).
+     */
+    @PostMapping("/api/dcc/external/verify-conformity")
+    public ResponseEntity<ConformityVerificationResultDto> verifyConformity(
+            @RequestParam(value = "file")                    MultipartFile xmlFile,
+            @RequestParam(value = "sensor", defaultValue = "ntc_temperature.json") String sensorFilename,
+            @RequestParam(value = "mae",          defaultValue = "0.10")  double mae,
+            @RequestParam(value = "pfaThreshold", defaultValue = "20.0")  double pfaThreshold,
+            @RequestParam(value = "uRef",         defaultValue = "0.065") double uRef
+    ) {
+        if (xmlFile == null || xmlFile.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        Path tmpDir = null;
+        try {
+            // 1. Create temp directory
+            tmpDir = Files.createTempDirectory("dcc_verify_conformity_");
+
+            // 2. Write uploaded XML to temp dir
+            Path xmlPath = tmpDir.resolve("uploaded_certificate.xml");
+            xmlFile.transferTo(xmlPath.toFile());
+
+            // 3. Resolve verify script path
+            Path scriptPath = resolveVerifyScript();
+
+            // 4. Resolve sensor model path
+            Path sensorPath = resolveModelsDir().resolve("sensors").resolve(sensorFilename);
+
+            // 5. Create images output dir
+            Path imagesDir = tmpDir.resolve("images");
+            Files.createDirectories(imagesDir);
+
+            // 6. Build command
+            List<String> cmd = new ArrayList<>();
+            cmd.add(pythonCmd);
+            cmd.add(scriptPath.toString());
+            cmd.add("--xml");           cmd.add(xmlPath.toString());
+            cmd.add("--sensor");        cmd.add(sensorPath.toString());
+            cmd.add("--mae");           cmd.add(String.valueOf(mae));
+            cmd.add("--pfa-threshold"); cmd.add(String.valueOf(pfaThreshold));
+            cmd.add("--u-ref");         cmd.add(String.valueOf(uRef));
+            cmd.add("--images-dir");    cmd.add(imagesDir.toString());
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            pb.directory(scriptPath.getParent().toFile());
+
+            log.info("[DccController] verifyConformity cmd: {}", cmd);
+
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            boolean finished = process.waitFor(5, java.util.concurrent.TimeUnit.MINUTES);
+            int exitCode = finished ? process.exitValue() : -1;
+            if (!finished) {
+                process.destroyForcibly();
+                output += "\n[TIMEOUT] Process killed after 5 minutes.";
+            }
+
+            log.info("[DccController] verifyConformity exit={}", exitCode);
+
+            // 7. Determine overall verdict from log
+            // Note: check "NON CONFORME" before "CONFORME" since the latter is a substring of the former
+            String overall = "ERROR";
+            if (exitCode == 0) {
+                if (output.contains("OVERALL VERDICT: NON CONFORME")) {
+                    overall = "NON CONFORME";
+                } else if (output.contains("OVERALL VERDICT: CONFORME")) {
+                    overall = "CONFORME";
+                } else {
+                    overall = "UNKNOWN";
+                }
+            }
+
+            // 8. Collect generated images as Base64 data URIs
+            List<ConformityVerificationResultDto.ConformityImageDto> images = new ArrayList<>();
+            if (Files.isDirectory(imagesDir)) {
+                try (var stream = Files.list(imagesDir)) {
+                    stream.filter(p -> p.toString().endsWith(".png"))
+                          .sorted()
+                          .forEach(p -> {
+                              try {
+                                  byte[] bytes = Files.readAllBytes(p);
+                                  String b64 = Base64.getEncoder().encodeToString(bytes);
+                                  images.add(new ConformityVerificationResultDto.ConformityImageDto(
+                                          p.getFileName().toString(),
+                                          "data:image/png;base64," + b64
+                                  ));
+                              } catch (IOException e) {
+                                  log.warn("[DccController] Could not read image {}: {}", p, e.getMessage());
+                              }
+                          });
+                }
+            }
+
+            ConformityVerificationResultDto result = new ConformityVerificationResultDto(
+                    exitCode == 0, overall, output, images
+            );
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            log.error("[DccController] verifyConformity error: {}", e.getMessage(), e);
+            ConformityVerificationResultDto err = new ConformityVerificationResultDto(
+                    false, "ERROR", "Internal error: " + e.getMessage(), List.of()
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
+        } finally {
+            // 9. Clean up temp directory
+            if (tmpDir != null) {
+                try {
+                    Files.walk(tmpDir)
+                         .sorted(Comparator.reverseOrder())
+                         .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
+                } catch (IOException ignored) {}
+            }
+        }
+    }
+
+    /** Resolves verify_dcc_conformity.py path (adjacent to analisi_calib_data.py). */
+    private Path resolveVerifyScript() {
+        if (calibrationScriptPath != null && !calibrationScriptPath.isBlank()) {
+            Path sibling = Path.of(calibrationScriptPath).resolveSibling("verify_dcc_conformity.py");
+            if (Files.exists(sibling)) return sibling.toAbsolutePath();
+        }
+        Path candidate = Path.of("../calibration/scripts/verify_dcc_conformity.py").toAbsolutePath().normalize();
+        if (Files.exists(candidate)) return candidate;
+        throw new IllegalStateException(
+                "verify_dcc_conformity.py not found. Set CALIBRATION_SCRIPT_PATH env var or place it at " + candidate);
+    }
+
+    /** Resolves the models_in directory (reuses same logic as CalibrationRunService). */
+    private Path resolveModelsDir() {
+        if (calibrationModelsPath != null && !calibrationModelsPath.isBlank()) {
+            return Path.of(calibrationModelsPath).toAbsolutePath();
+        }
+        Path candidate = Path.of("../calibration/models_in").toAbsolutePath().normalize();
+        if (Files.exists(candidate)) return candidate;
+        throw new IllegalStateException(
+                "models_in directory not found. Set CALIBRATION_MODELS_PATH env var or place it at " + candidate);
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)

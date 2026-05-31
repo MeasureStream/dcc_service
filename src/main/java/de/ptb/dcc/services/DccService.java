@@ -141,11 +141,20 @@ public class DccService {
     // -------------------------------------------------------------------------
     @Transactional
     public Dcc createDcc(String sensorId, String name, String dccJson) {
+        return createDcc(sensorId, name, dccJson, null);
+    }
+
+    @Transactional
+    public Dcc createDcc(String sensorId, String name, String dccJson, Long calibrationRequestId) {
         Dcc dcc = new Dcc();
         dcc.setName(name);
         dcc.setDccJson(dccJson != null ? dccJson : "{}");
         dcc.setCreatedBy(getCurrentUserId());
         dcc.setUser(getOrCreateCurrentUser());
+
+        if (calibrationRequestId != null) {
+            dcc.setCalibrationRequestId(calibrationRequestId);
+        }
 
         if (sensorId != null && !sensorId.isEmpty()) {
             try {

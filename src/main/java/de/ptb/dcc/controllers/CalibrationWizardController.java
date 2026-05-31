@@ -3,10 +3,14 @@ package de.ptb.dcc.controllers;
 import de.ptb.dcc.dtos.CalibrationDto;
 import de.ptb.dcc.dtos.CalibrationRunConfig;
 import de.ptb.dcc.dtos.CalibrationRunConfigOptions;
+import de.ptb.dcc.dtos.DccDto;
 import de.ptb.dcc.dtos.WizardStepRequest;
 import de.ptb.dcc.entities.Calibration;
+import de.ptb.dcc.entities.CalibrationRequest;
+import de.ptb.dcc.repositories.CalibrationRequestRepository;
 import de.ptb.dcc.services.CalibrationRunService;
 import de.ptb.dcc.services.CalibrationWizardService;
+import de.ptb.dcc.services.DccService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,13 +23,16 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Wizard endpoint per la compilazione certificato.
@@ -52,17 +59,23 @@ public class CalibrationWizardController {
 
     private final CalibrationWizardService wizardService;
     private final CalibrationRunService runService;
+    private final DccService dccService;
+    private final CalibrationRequestRepository calibrationRequestRepository;
 
     @Value("${calibration.runs.path:./calibration-runs}")
     private String calibrationRunsPath;
 
-    @Value("${gemimeg.backend.url:http://gemimeg-backend:8080}")
+    @Value("${gemimeg.backend.url:http://gemimeg-backend:10001}")
     private String gemimegUrl;
 
     public CalibrationWizardController(CalibrationWizardService wizardService,
-                                        CalibrationRunService runService) {
+                                        CalibrationRunService runService,
+                                        DccService dccService,
+                                        CalibrationRequestRepository calibrationRequestRepository) {
         this.wizardService = wizardService;
         this.runService = runService;
+        this.dccService = dccService;
+        this.calibrationRequestRepository = calibrationRequestRepository;
     }
 
     /** Inizializza o ricarica il wizard per una CalibrationRequest */
@@ -167,12 +180,19 @@ public class CalibrationWizardController {
     }
 
     /**
-     * POST /api/calibrations/wizard/{calibrationId}/dcc-json
-     * Converts the DCC XML stored in this calibration to JSON via the gemimeg backend.
-     * Used by the frontend "Salva DCC" flow (XML → JSON → POST /api/dcc).
+     * POST /api/calibrations/wizard/{calibrationId}/save-dcc
+     *
+     * All-in-one "Salva DCC" backend flow:
+     *   1. Reads the DCC XML stored on this Calibration entity
+     *   2. Converts it to JSON via gemimeg POST /api/v1/dcc/xsd/dcc/json (UTF-8 safe)
+     *   3. Resolves sensorId from the linked CalibrationRequest
+     *   4. Creates a DCC record with sensorId + calibrationRequestId both set
+     *   5. Returns the saved DccDto
+     *
+     * The frontend only calls this one endpoint — no separate POST /api/dcc needed.
      */
-    @PostMapping("/wizard/{calibrationId}/dcc-json")
-    public ResponseEntity<?> convertDccXmlToJson(@PathVariable Long calibrationId) {
+    @PostMapping("/wizard/{calibrationId}/save-dcc")
+    public ResponseEntity<?> saveDccFromCalibration(@PathVariable Long calibrationId) {
         try {
             Calibration calib = wizardService.calibrationRepo().findById(calibrationId)
                     .orElseThrow(() -> new RuntimeException("Calibration not found: " + calibrationId));
@@ -182,11 +202,22 @@ public class CalibrationWizardController {
                         .body("{\"error\": \"No DCC XML found for this calibration. Run the calibration first.\"}");
             }
 
-            // Call gemimeg POST /api/v1/dcc/xsd/dcc/json (consumes XML, produces JSON)
+            // ── Step 1: Convert XML → JSON via gemimeg ─────────────────────
+            // RestTemplate's StringHttpMessageConverter defaults to ISO-8859-1 for
+            // application/xml, corrupting multi-byte UTF-8 chars (°, –, ≈).
+            // Fix: force UTF-8 on the converter and in the Content-Type header.
             RestTemplate restTemplate = new RestTemplate();
+            restTemplate.getMessageConverters().stream()
+                    .filter(c -> c instanceof StringHttpMessageConverter)
+                    .map(c -> (StringHttpMessageConverter) c)
+                    .forEach(c -> c.setDefaultCharset(StandardCharsets.UTF_8));
+
+            String xmlPayload = sanitizeUtf8(calib.getDccXml());
+
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_XML);
-            HttpEntity<String> entity = new HttpEntity<>(calib.getDccXml(), headers);
+            headers.setContentType(new MediaType("application", "xml", StandardCharsets.UTF_8));
+            headers.setAcceptCharset(List.of(StandardCharsets.UTF_8));
+            HttpEntity<String> entity = new HttpEntity<>(xmlPayload, headers);
 
             ResponseEntity<String> gemimegResponse = restTemplate.exchange(
                     gemimegUrl + "/api/v1/dcc/xsd/dcc/json",
@@ -195,12 +226,55 @@ public class CalibrationWizardController {
                     String.class
             );
 
-            return ResponseEntity.ok()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(gemimegResponse.getBody());
+            String dccJson = gemimegResponse.getBody();
+
+            // ── Step 2: Resolve calibrationRequestId and sensorId ──────────
+            Long calibrationRequestId = calib.getCalibrationRequestId();
+            String sensorId = null;
+
+            if (calibrationRequestId != null) {
+                CalibrationRequest req = calibrationRequestRepository
+                        .findById(calibrationRequestId).orElse(null);
+                if (req != null && req.getSensorId() != null) {
+                    sensorId = req.getSensorId().toString();
+                }
+            }
+
+            // ── Step 3: Create DCC record with both IDs ────────────────────
+            String dccName = "DCC — " + (calib.getRunId() != null ? calib.getRunId()
+                    : "calibration-" + calibrationId);
+
+            de.ptb.dcc.entities.Dcc savedDcc = dccService.createDcc(
+                    sensorId,
+                    dccName,
+                    dccJson,
+                    calibrationRequestId
+            );
+
+            DccDto dto = dccService.mapToDto(savedDcc);
+            log.info("[Wizard] DCC saved: id={} sensorId={} calibrationRequestId={}",
+                    dto.getId(), dto.getSensorId(), calibrationRequestId);
+            return ResponseEntity.ok(dto);
 
         } catch (Exception e) {
-            log.error("[Wizard] dcc-json conversion failed for calibrationId={}: {}", calibrationId, e.getMessage(), e);
+            log.error("[Wizard] save-dcc failed for calibrationId={}: {}", calibrationId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("{\"error\": \"" + e.getMessage().replace("\"", "'") + "\"}");
+        }
+    }
+
+    /**
+     * GET /api/calibrations/sensor-templates
+     * Returns the list of available sensor template JSON file names from models_in/sensors/.
+     * Does not require a calibration ID — used by standalone verify-conformity UI.
+     */
+    @GetMapping("/sensor-templates")
+    public ResponseEntity<?> getSensorTemplates() {
+        try {
+            java.util.List<String> sensors = runService.listSensorTemplates();
+            return ResponseEntity.ok(sensors);
+        } catch (Exception e) {
+            log.error("[Wizard] getSensorTemplates failed: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("{\"error\": \"" + e.getMessage().replace("\"", "'") + "\"}");
         }
@@ -243,5 +317,29 @@ public class CalibrationWizardController {
         if (filename.endsWith(".xml"))  return MediaType.APPLICATION_XML;
         if (filename.endsWith(".json")) return MediaType.APPLICATION_JSON;
         return MediaType.APPLICATION_OCTET_STREAM;
+    }
+
+    /**
+     * Sanitizes a string to ensure it contains only valid Unicode code points.
+     *
+     * When the DCC XML is stored as a Java String in PostgreSQL TEXT column and read back,
+     * any stray bytes that slipped in via wrong encoding at write-time could cause
+     * JAXB/gemimeg to reject the payload with "Invalid byte N of M-byte UTF-8 sequence".
+     *
+     * This method round-trips the string through UTF-8 bytes with REPLACE error handling,
+     * substituting any un-encodable surrogate or private-use characters with the Unicode
+     * replacement character (U+FFFD), then strips those replacement characters so the XML
+     * stays well-formed.
+     *
+     * Valid multi-byte UTF-8 characters (°, –, ≈, etc.) pass through unchanged because
+     * they are already valid Unicode code points in the Java String.
+     */
+    private static String sanitizeUtf8(String input) {
+        if (input == null) return null;
+        // Encode to UTF-8 bytes with replacement for unmappable chars, then decode back
+        byte[] utf8Bytes = input.getBytes(StandardCharsets.UTF_8);
+        String roundTripped = new String(utf8Bytes, StandardCharsets.UTF_8);
+        // Remove any replacement characters introduced by the round-trip
+        return roundTripped.replace("\uFFFD", "");
     }
 }

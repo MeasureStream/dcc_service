@@ -18,8 +18,12 @@ FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
-# Install Python for build_input_json.py execution
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python-is-python3 && rm -rf /var/lib/apt/lists/*
+# Install Python + calibration pipeline dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python-is-python3 python3-pip python3-venv \
+    && pip3 install --no-cache-dir --break-system-packages \
+       numpy scipy reportlab matplotlib \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
 RUN addgroup --system spring && adduser --system spring --ingroup spring
@@ -42,9 +46,15 @@ ENV SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE=50MB
 ENV SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE=50MB
 
 # Service URLs (configurable for different environments)
-ENV GEMIMEG_BACKEND_URL=http://gemimeg-backend:8080
+ENV GEMIMEG_BACKEND_URL=http://gemimeg-backend:10001
 ENV GATEWAY_IAM_URL=http://gateway-iam:8080
 ENV KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+
+# Calibration pipeline paths (override via env vars or compose volumes)
+ENV CALIBRATION_SCRIPT_PATH=/app/calibration/scripts/analisi_calib_data.py
+ENV CALIBRATION_MODELS_PATH=/app/calibration/models_in
+ENV CALIBRATION_RUNS_PATH=/app/calibration-runs
+ENV PYTHON_CMD=python3
 
 # Copy the jar file from builder stage
 COPY --from=builder /app/target/dcc-service-*.jar app.jar

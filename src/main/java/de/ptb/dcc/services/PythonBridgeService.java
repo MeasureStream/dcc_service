@@ -161,6 +161,10 @@ public class PythonBridgeService {
      * @param conformityOutput absolute path for conformity JSON output
      * @param imagesDir   absolute path to the images base directory
      * @param config      user-selected CLI options
+     * @param oldA        previous coefficient A from DB (null = first calibration, use defaults)
+     * @param oldB        previous coefficient B from DB
+     * @param oldC        previous coefficient C from DB (cubic a2 or cube-log C3)
+     * @param oldD        previous coefficient D from DB (cubic a3)
      */
     public CalibrationRunResult runCalibration(
             String scriptPath,
@@ -173,7 +177,11 @@ public class PythonBridgeService {
             String xmlOutput,
             String conformityOutput,
             String imagesDir,
-            CalibrationRunConfig config
+            CalibrationRunConfig config,
+            Double oldA,
+            Double oldB,
+            Double oldC,
+            Double oldD
     ) throws IOException, InterruptedException {
 
         List<String> cmd = new ArrayList<>();
@@ -188,6 +196,13 @@ public class PythonBridgeService {
         cmd.add("--xml");         cmd.add(xmlOutput);
         cmd.add("--conformity-output"); cmd.add(conformityOutput);
         cmd.add("--images-dir");  cmd.add(imagesDir);
+
+        // Inject previous calibration coefficients from DB so Python uses them as old_A/B/C/D
+        // These override the 0.0 placeholders in the sensor JSON template.
+        if (oldA != null) { cmd.add("--old-a"); cmd.add(String.valueOf(oldA)); }
+        if (oldB != null) { cmd.add("--old-b"); cmd.add(String.valueOf(oldB)); }
+        if (oldC != null) { cmd.add("--old-c"); cmd.add(String.valueOf(oldC)); }
+        if (oldD != null) { cmd.add("--old-d"); cmd.add(String.valueOf(oldD)); }
 
         if (config.getProcedure() != null && !config.getProcedure().isBlank()) {
             cmd.add("--procedure"); cmd.add(config.getProcedure());

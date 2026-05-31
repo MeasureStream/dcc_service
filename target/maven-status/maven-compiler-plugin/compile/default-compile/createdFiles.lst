@@ -6,6 +6,7 @@ de\ptb\dcc\services\CalibrationWizardService.class
 de\ptb\dcc\repositories\MeasurestreamCompanyRepository.class
 de\ptb\dcc\configurations\DebugAuthFilter.class
 de\ptb\dcc\services\DccSigningService$SigningResult.class
+de\ptb\dcc\dtos\ConformityVerificationResultDto$ConformityImageDto.class
 de\ptb\dcc\dtos\DccCreateRequest.class
 de\ptb\dcc\repositories\DccRepository.class
 de\ptb\dcc\DccServiceApplication.class
@@ -41,6 +42,7 @@ de\ptb\dcc\entities\CalibrationMethod.class
 de\ptb\dcc\dtos\DccValidationResultDto.class
 de\ptb\dcc\dtos\DccUpdateRequest.class
 de\ptb\dcc\entities\CalibrationRequest.class
+de\ptb\dcc\dtos\ConformityVerificationResultDto.class
 de\ptb\dcc\dtos\DccDto.class
 de\ptb\dcc\services\KafkaCalibrationRequestConsumer.class
 de\ptb\dcc\dtos\MeasurementUnitDto.class
