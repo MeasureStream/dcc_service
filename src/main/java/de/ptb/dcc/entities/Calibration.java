@@ -65,13 +65,39 @@ public class Calibration {
     @Column(name = "certificato_in", columnDefinition = "TEXT")
     private String certificatoIn;
 
-    /** Output della calibrazione (future use) */
+    /** Output della calibrazione — certificato_funzione_filled.json */
     @Column(name = "result_json", columnDefinition = "TEXT")
     private String resultJson;
 
     /** Lista URL immagini (JSON array di stringhe) */
     @Column(name = "images", columnDefinition = "TEXT")
     private String images;
+
+    // ── Calibration run fields ─────────────────────────────────────────────
+
+    /** ID univoco del run (= calibrationId dalla CalibrationRequest, usato come dir name) */
+    @Column(name = "run_id")
+    private String runId;
+
+    /** Stato del run: PENDING, RUNNING, SUCCESS, FAILED */
+    @Column(name = "run_status", length = 20)
+    private String runStatus;
+
+    /** stdout + stderr completo del processo Python */
+    @Column(name = "run_log", columnDefinition = "TEXT")
+    private String runLog;
+
+    /** Contenuto di conformity.json generato da verifica_conformita */
+    @Column(name = "conformity_json", columnDefinition = "TEXT")
+    private String conformityJson;
+
+    /** URL locale al PDF generato (es. /api/calibrations/static/runs/<runId>/output/ntc_cert_funzione.pdf) */
+    @Column(name = "pdf_output_url", columnDefinition = "TEXT")
+    private String pdfOutputUrl;
+
+    /** Contenuto XML del DCC generato (ntc_calibration_certificate.xml) */
+    @Column(name = "dcc_xml", columnDefinition = "TEXT")
+    private String dccXml;
 
     @PrePersist
     protected void onCreate() {
@@ -139,4 +165,22 @@ public class Calibration {
 
     public String getImages() { return images; }
     public void setImages(String images) { this.images = images; }
+
+    public String getRunId() { return runId; }
+    public void setRunId(String runId) { this.runId = runId; }
+
+    public String getRunStatus() { return runStatus; }
+    public void setRunStatus(String runStatus) { this.runStatus = runStatus; }
+
+    public String getRunLog() { return runLog; }
+    public void setRunLog(String runLog) { this.runLog = runLog; }
+
+    public String getConformityJson() { return conformityJson; }
+    public void setConformityJson(String conformityJson) { this.conformityJson = conformityJson; }
+
+    public String getPdfOutputUrl() { return pdfOutputUrl; }
+    public void setPdfOutputUrl(String pdfOutputUrl) { this.pdfOutputUrl = pdfOutputUrl; }
+
+    public String getDccXml() { return dccXml; }
+    public void setDccXml(String dccXml) { this.dccXml = dccXml; }
 }

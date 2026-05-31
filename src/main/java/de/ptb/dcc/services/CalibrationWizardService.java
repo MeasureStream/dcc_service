@@ -181,6 +181,12 @@ public class CalibrationWizardService {
         dto.setCertificatoIn(c.getCertificatoIn());
         dto.setResultJson(c.getResultJson());
         dto.setImages(c.getImages());
+        dto.setRunId(c.getRunId());
+        dto.setRunStatus(c.getRunStatus());
+        dto.setRunLog(c.getRunLog());
+        dto.setConformityJson(c.getConformityJson());
+        dto.setPdfOutputUrl(c.getPdfOutputUrl());
+        dto.setDccXml(c.getDccXml());
         return dto;
     }
 }

@@ -27,6 +27,14 @@ public class CalibrationDto {
     private String resultJson;
     private String images;
 
+    // calibration run fields
+    private String runId;
+    private String runStatus;
+    private String runLog;
+    private String conformityJson;
+    private String pdfOutputUrl;
+    private String dccXml;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -77,4 +85,22 @@ public class CalibrationDto {
 
     public String getImages() { return images; }
     public void setImages(String v) { this.images = v; }
+
+    public String getRunId() { return runId; }
+    public void setRunId(String v) { this.runId = v; }
+
+    public String getRunStatus() { return runStatus; }
+    public void setRunStatus(String v) { this.runStatus = v; }
+
+    public String getRunLog() { return runLog; }
+    public void setRunLog(String v) { this.runLog = v; }
+
+    public String getConformityJson() { return conformityJson; }
+    public void setConformityJson(String v) { this.conformityJson = v; }
+
+    public String getPdfOutputUrl() { return pdfOutputUrl; }
+    public void setPdfOutputUrl(String v) { this.pdfOutputUrl = v; }
+
+    public String getDccXml() { return dccXml; }
+    public void setDccXml(String v) { this.dccXml = v; }
 }

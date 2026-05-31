@@ -9,6 +9,7 @@ de\ptb\dcc\services\DccSigningService$SigningResult.class
 de\ptb\dcc\dtos\DccCreateRequest.class
 de\ptb\dcc\repositories\DccRepository.class
 de\ptb\dcc\DccServiceApplication.class
+de\ptb\dcc\services\PythonBridgeService$CalibrationRunResult.class
 de\ptb\dcc\services\KafkaCalibrationConsumer.class
 de\ptb\dcc\repositories\CalibrationRepository.class
 de\ptb\dcc\repositories\MeasurementUnitRepository.class
@@ -48,6 +49,7 @@ de\ptb\dcc\entities\MeasurestreamCompany.class
 de\ptb\dcc\dtos\CalibrationRequestDto.class
 de\ptb\dcc\entities\Sensor.class
 sign_pdf.class
+de\ptb\dcc\dtos\CalibrationRunConfig.class
 de\ptb\dcc\repositories\ClientCompanyRepository.class
 de\ptb\dcc\entities\Calibration.class
 test_java_signing.class
@@ -59,4 +61,6 @@ de\ptb\dcc\dtos\SensorDto.class
 de\ptb\dcc\repositories\ControlUnitRepository.class
 de\ptb\dcc\dtos\AnagraficaDto.class
 de\ptb\dcc\configurations\CustomJwtGrantedAuthoritiesConverter.class
+de\ptb\dcc\dtos\CalibrationRunConfigOptions.class
+de\ptb\dcc\services\CalibrationRunService.class
 de\ptb\dcc\controllers\CalibrationController.class

@@ -17,6 +17,7 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\User.ja
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationMessageDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\AnagraficaSeeder.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\controllers\CalibrationWizardController.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationRunConfig.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\ClientCompany.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\CalibrationMethod.java
@@ -53,6 +54,8 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Calibra
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\CalibratorRequest.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\KafkaCalibrationRequestConsumer.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\CalibrationRunService.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationRunConfigOptions.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\MeasurestreamCompanyRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\verify_xml.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccCreateRequest.java

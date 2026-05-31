@@ -1,5 +1,6 @@
 package de.ptb.dcc.services;
 
+import de.ptb.dcc.dtos.CalibrationRunConfig;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * Unico punto di integrazione con Python.
@@ -35,6 +38,10 @@ public class PythonBridgeService {
     /** Se vuoto, lo script viene estratto dalla classpath automaticamente */
     @Value("${python.script.path:}")
     private String configuredScriptPath;
+
+    /** Percorso assoluto a analisi_calib_data.py (configurabile via env CALIBRATION_SCRIPT_PATH) */
+    @Value("${calibration.script.path:}")
+    private String calibrationScriptPath;
 
     /** Percorso effettivo usato a runtime (risolto in @PostConstruct) */
     private String resolvedScriptPath;
@@ -130,5 +137,89 @@ public class PythonBridgeService {
                         .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
             } catch (IOException ignored) {}
         }
+    }
+
+    // ── Calibration run ────────────────────────────────────────────────────
+
+    public record CalibrationRunResult(int exitCode, String log) {}
+
+    /**
+     * Launches analisi_calib_data.py as a subprocess.
+     *
+     * All paths are absolute and pre-created by CalibrationRunService.
+     * The process runs with a 10-minute timeout; stdout+stderr are captured
+     * and returned together in the result log.
+     *
+     * @param scriptPath  absolute path to analisi_calib_data.py
+     * @param inputJson   absolute path to the measurement JSON (processedJson)
+     * @param sensorJson  absolute path to the sensor model JSON
+     * @param refJson     absolute path to the reference calibrator JSON
+     * @param certInput   absolute path to certificato_in (certificatoIn from wizard)
+     * @param certOutput  absolute path for certificato_funzione_filled.json output
+     * @param pdfOutput   absolute path for PDF output
+     * @param xmlOutput   absolute path for DCC XML output
+     * @param conformityOutput absolute path for conformity JSON output
+     * @param imagesDir   absolute path to the images base directory
+     * @param config      user-selected CLI options
+     */
+    public CalibrationRunResult runCalibration(
+            String scriptPath,
+            String inputJson,
+            String sensorJson,
+            String refJson,
+            String certInput,
+            String certOutput,
+            String pdfOutput,
+            String xmlOutput,
+            String conformityOutput,
+            String imagesDir,
+            CalibrationRunConfig config
+    ) throws IOException, InterruptedException {
+
+        List<String> cmd = new ArrayList<>();
+        cmd.add(pythonCmd);
+        cmd.add(scriptPath);
+        cmd.add("--input");       cmd.add(inputJson);
+        cmd.add("--sensor");      cmd.add(sensorJson);
+        cmd.add("--ref");         cmd.add(refJson);
+        cmd.add("--cert-input");  cmd.add(certInput);
+        cmd.add("--cert-output"); cmd.add(certOutput);
+        cmd.add("--pdf");         cmd.add(pdfOutput);
+        cmd.add("--xml");         cmd.add(xmlOutput);
+        cmd.add("--conformity-output"); cmd.add(conformityOutput);
+        cmd.add("--images-dir");  cmd.add(imagesDir);
+
+        if (config.getProcedure() != null && !config.getProcedure().isBlank()) {
+            cmd.add("--procedure"); cmd.add(config.getProcedure());
+        }
+        if (!config.isCharts())        { cmd.add("--no-charts"); }
+        if (!config.isVerbose())       { cmd.add("--no-verbose"); }
+        if (config.isUpdateIfOutRange()){ cmd.add("--update-parameters-if-out-range-error"); }
+        if (config.isCheckUnits())     { cmd.add("--check-units"); }
+        if (config.isConvertUnits())   { cmd.add("--convert-units"); }
+        if (config.isNoPdf())          { cmd.add("--no-pdf"); }
+        if (config.isNoXml())          { cmd.add("--no-xml"); }
+
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.redirectErrorStream(true);
+        // Run from the script's parent directory so relative imports work
+        pb.directory(Path.of(scriptPath).getParent().toFile());
+
+        log.info("[PythonBridge] runCalibration cmd: {}", cmd);
+
+        Process process = pb.start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+        // Wait up to 10 minutes
+        boolean finished = process.waitFor(10, java.util.concurrent.TimeUnit.MINUTES);
+        int exitCode = finished ? process.exitValue() : -1;
+        if (!finished) {
+            process.destroyForcibly();
+            output += "\n[TIMEOUT] Process killed after 10 minutes.";
+            log.error("[PythonBridge] runCalibration timed out");
+        }
+
+        log.info("[PythonBridge] runCalibration exit={} output_length={}", exitCode, output.length());
+        return new CalibrationRunResult(exitCode, output);
     }
 }
