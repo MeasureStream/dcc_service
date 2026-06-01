@@ -26,9 +26,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        numpy scipy reportlab matplotlib \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user (app runs as 'spring' via entrypoint su)
+# Create a non-root user
 RUN addgroup --system spring && adduser --system spring --ingroup spring
 RUN mkdir -p /tmp/calibration-runs && chown spring:spring /tmp/calibration-runs
+USER spring:spring
 
 # Environment Variables
 ENV SERVER_PORT=8080
@@ -67,8 +68,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Expose port
 EXPOSE ${SERVER_PORT}
 
-# Startup entrypoint: fix volume permissions at runtime, then drop to spring user
-RUN printf '#!/bin/sh\nchown -R spring:spring /tmp/calibration-runs 2>/dev/null || true\nexec su spring -c "exec java -jar /app/app.jar"\n' > /usr/local/bin/docker-entrypoint.sh \
-    && chmod +x /usr/local/bin/docker-entrypoint.sh
-
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]
