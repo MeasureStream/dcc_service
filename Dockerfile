@@ -54,7 +54,7 @@ ENV KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 # Calibration pipeline paths (override via env vars or compose volumes)
 ENV CALIBRATION_SCRIPT_PATH=/app/calibration/scripts/analisi_calib_data.py
 ENV CALIBRATION_MODELS_PATH=/app/calibration/models_in
-ENV CALIBRATION_RUNS_PATH=/app/calibration-runs
+ENV CALIBRATION_RUNS_PATH=/tmp/calibration-runs
 ENV PYTHON_CMD=python3
 
 # Copy the jar file from builder stage

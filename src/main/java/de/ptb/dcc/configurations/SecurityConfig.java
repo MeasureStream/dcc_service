@@ -29,6 +29,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
+                        // Static calibration run outputs (PDFs, images, XMLs) are opened
+                        // directly in the browser via <a href> — no Authorization header
+                        // is sent on direct navigation, so they must be permit-all.
+                        .requestMatchers("/api/calibrations/static/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))

@@ -17,9 +17,9 @@
       "accreditation_body": "Certificate issued by internal laboratory procedure validated by Accredia LAT No. 042",
       "reproduction_conditions": "Partial or full reproduction requires written authorization from the laboratory.",
       "traceability_statement": "Metrological traceability chain linked to INRIM national standards via accredited calibration certificates.",
-      "authorised_by": "",
-      "executed_by": "",
-      "signature_name": ""
+      "authorised_by": "Mario attrovio",
+      "executed_by": "Christian dellisanti",
+      "signature_name": "Mario_attrovio"
     },
     "sensor_method_template": {
       "device_type": "DIGITAL thermometer di mario",
@@ -68,8 +68,8 @@
         "uncertainty_limit": "within 0.10 C",
         "calibration_formula": "T = A · D + B"
       },
-      "model": "",
-      "serial_number": ""
+      "model": "0001",
+      "serial_number": "00010001"
     },
     "calibration_specific_data": {
       "certificate_title": "CALIBRATION CERTIFICATE",

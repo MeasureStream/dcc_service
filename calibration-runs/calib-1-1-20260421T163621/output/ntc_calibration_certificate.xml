@@ -39,11 +39,11 @@
                         <dcc:content lang="en">Measurestream electronics</dcc:content>
                     </dcc:name>
                 </dcc:manufacturer>
-                <dcc:model>Unknown model</dcc:model>
+                <dcc:model>0001</dcc:model>
                 <dcc:identifications>
                     <dcc:identification>
                         <dcc:issuer>manufacturer</dcc:issuer>
-                        <dcc:value>SERIAL-UNKNOWN</dcc:value>
+                        <dcc:value>00010001</dcc:value>
                         <dcc:name>
                             <dcc:content lang="en">Serial number</dcc:content>
                         </dcc:name>
@@ -86,7 +86,7 @@
             <dcc:respPerson>
                 <dcc:person>
                     <dcc:name>
-                        <dcc:content lang="en">Responsible person 1</dcc:content>
+                        <dcc:content lang="en">Christian dellisanti</dcc:content>
                     </dcc:name>
                 </dcc:person>
                 <dcc:mainSigner>true</dcc:mainSigner>
@@ -94,7 +94,7 @@
             <dcc:respPerson>
                 <dcc:person>
                     <dcc:name>
-                        <dcc:content lang="en">Responsible person 2</dcc:content>
+                        <dcc:content lang="en">Mario attrovio</dcc:content>
                     </dcc:name>
                 </dcc:person>
             </dcc:respPerson>
@@ -260,7 +260,7 @@
                                 </dcc:name>
                                 <si:hybrid>
                                     <si:realListXMLList>
-                                        <si:valueXMLList>-17.361116 -54.745336 -36.080391 -46.283037 -75.585534 -82.000544 -125.718482</si:valueXMLList>
+                                        <si:valueXMLList>53.303761 12.955057 15.037757 4.950499 -10.294094 -15.890496 -60.062484</si:valueXMLList>
                                         <si:unitXMLList>\degreecelsius</si:unitXMLList>
                                     </si:realListXMLList>
                                 </si:hybrid>

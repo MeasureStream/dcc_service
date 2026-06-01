@@ -17,9 +17,9 @@
       "accreditation_body": "Certificate issued by internal laboratory procedure validated by Accredia LAT No. 042",
       "reproduction_conditions": "Partial or full reproduction requires written authorization from the laboratory.",
       "traceability_statement": "Metrological traceability chain linked to INRIM national standards via accredited calibration certificates.",
-      "authorised_by": "",
-      "executed_by": "",
-      "signature_name": ""
+      "authorised_by": "Mario attrovio",
+      "executed_by": "Christian dellisanti",
+      "signature_name": "Mario_attrovio"
     },
     "sensor_method_template": {
       "device_type": "DIGITAL thermometer di mario",
@@ -88,14 +88,14 @@
         "_B_cal_degC": 30.688220514734482,
         "_u_B_degC": 0.22240007140919354
       },
-      "model": "",
-      "serial_number": "",
+      "model": "0001",
+      "serial_number": "00010001",
       "_notes_computed": [
         "Results refer to the instrument under calibration under the declared conditions.",
         "Uncertainties are determined according to ISO/IEC Guide 98-3 (GUM) and EA-4/02.",
         "Coverage factor k = 2, confidence level about 95 %.",
         "Reference instrument: Fluke 1502A thermometer readout + Pt100 probe (U=0.065 °C, k=2).",
-        "Sensor under calibration: DIGITAL thermometer (Measurestream electronics, model )."
+        "Sensor under calibration: DIGITAL thermometer (Measurestream electronics, model 0001)."
       ]
     },
     "calibration_specific_data": {
@@ -134,7 +134,7 @@
           1.0,
           -22.511725000000002,
           30.79203577375257,
-          -17.36111635421135,
+          53.30376077375257,
           53.30376077375257,
           0.06529122255169323
         ],
@@ -142,7 +142,7 @@
           2.0,
           19.997175,
           32.952232006038805,
-          -54.74533566418572,
+          12.955057006038807,
           12.955057006038807,
           0.06527363419216926
         ],
@@ -150,7 +150,7 @@
           3.0,
           29.997825000000002,
           45.035581851509534,
-          -36.080390984219136,
+          15.037756851509531,
           15.037756851509531,
           0.7964219940513397
         ],
@@ -158,7 +158,7 @@
           4.0,
           40.001,
           44.951499316042906,
-          -46.28303681906,
+          4.950499316042908,
           4.950499316042908,
           0.2576891833248743
         ],
@@ -166,7 +166,7 @@
           5.0,
           45.00171,
           34.70761644267174,
-          -75.58553383610797,
+          -10.29409355732826,
           -10.29409355732826,
           0.06526145835142945
         ],
@@ -174,7 +174,7 @@
           6.0,
           50.0016,
           34.1111036666974,
-          -82.00054411948798,
+          -15.8904963333026,
           -15.8904963333026,
           0.06530263005376391
         ],
@@ -182,7 +182,7 @@
           7.0,
           94.50445000000002,
           34.44196594328706,
-          -125.71848231631239,
+          -60.06248405671296,
           -60.06248405671296,
           0.0652591416246513
         ]
@@ -192,7 +192,7 @@
           1.0,
           -22.511725000000002,
           30.79203577375257,
-          -17.36111635421135,
+          53.30376077375257,
           53.30376077375257,
           0.06529122255169323
         ],
@@ -200,7 +200,7 @@
           2.0,
           19.997175,
           32.952232006038805,
-          -54.74533566418572,
+          12.955057006038807,
           12.955057006038807,
           0.06527363419216926
         ],
@@ -208,7 +208,7 @@
           3.0,
           29.997825000000002,
           45.035581851509534,
-          -36.080390984219136,
+          15.037756851509531,
           15.037756851509531,
           0.7964219940513397
         ],
@@ -216,7 +216,7 @@
           4.0,
           40.001,
           44.951499316042906,
-          -46.28303681906,
+          4.950499316042908,
           4.950499316042908,
           0.2576891833248743
         ],
@@ -224,7 +224,7 @@
           5.0,
           45.00171,
           34.70761644267174,
-          -75.58553383610797,
+          -10.29409355732826,
           -10.29409355732826,
           0.06526145835142945
         ],
@@ -232,7 +232,7 @@
           6.0,
           50.0016,
           34.1111036666974,
-          -82.00054411948798,
+          -15.8904963333026,
           -15.8904963333026,
           0.06530263005376391
         ],
@@ -240,7 +240,7 @@
           7.0,
           94.50445000000002,
           34.44196594328706,
-          -125.71848231631239,
+          -60.06248405671296,
           -60.06248405671296,
           0.0652591416246513
         ]
@@ -485,49 +485,49 @@
       {
         "point": 1,
         "T_ref_degC": -22.511725000000002,
-        "as_found_error_degC": -17.36111635421135,
+        "as_found_error_degC": 53.30376077375257,
         "max_allowed_error_degC": 0.6,
         "in_range": false
       },
       {
         "point": 2,
         "T_ref_degC": 19.997175,
-        "as_found_error_degC": -54.74533566418572,
+        "as_found_error_degC": 12.955057006038807,
         "max_allowed_error_degC": 0.45,
         "in_range": false
       },
       {
         "point": 3,
         "T_ref_degC": 29.997825000000002,
-        "as_found_error_degC": -36.080390984219136,
+        "as_found_error_degC": 15.037756851509531,
         "max_allowed_error_degC": 0.3,
         "in_range": false
       },
       {
         "point": 4,
         "T_ref_degC": 40.001,
-        "as_found_error_degC": -46.28303681906,
+        "as_found_error_degC": 4.950499316042908,
         "max_allowed_error_degC": 0.3,
         "in_range": false
       },
       {
         "point": 5,
         "T_ref_degC": 45.00171,
-        "as_found_error_degC": -75.58553383610797,
+        "as_found_error_degC": -10.29409355732826,
         "max_allowed_error_degC": 0.3,
         "in_range": false
       },
       {
         "point": 6,
         "T_ref_degC": 50.0016,
-        "as_found_error_degC": -82.00054411948798,
+        "as_found_error_degC": -15.8904963333026,
         "max_allowed_error_degC": 0.45,
         "in_range": false
       },
       {
         "point": 7,
         "T_ref_degC": 94.50445000000002,
-        "as_found_error_degC": -125.71848231631239,
+        "as_found_error_degC": -60.06248405671296,
         "max_allowed_error_degC": 0.6,
         "in_range": false
       }

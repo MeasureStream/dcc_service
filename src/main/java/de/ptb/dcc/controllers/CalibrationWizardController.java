@@ -307,7 +307,21 @@ public class CalibrationWizardController {
 
         Resource resource = new FileSystemResource(filePath);
         MediaType mediaType = detectMediaType(filePath.getFileName().toString());
-        return ResponseEntity.ok().contentType(mediaType).body(resource);
+        String filename = filePath.getFileName().toString();
+
+        // Set Content-Disposition with the real filename so the browser
+        // shows the correct name in the download dialog / PDF viewer tab.
+        // Use "inline" so PDFs and images open in the browser tab rather than
+        // triggering a forced download.
+        org.springframework.http.ContentDisposition disposition =
+                org.springframework.http.ContentDisposition.inline()
+                        .filename(filename, java.nio.charset.StandardCharsets.UTF_8)
+                        .build();
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(resource);
     }
 
     private MediaType detectMediaType(String filename) {
