@@ -310,7 +310,7 @@ public class CalibrationRunService {
     private String deriveRunId(Calibration calib) {
         if (calib.getCalibrationRequestId() != null) {
             return requestRepo.findById(calib.getCalibrationRequestId())
-                    .map(r -> r.getCalibrationId() != null ? r.getCalibrationId() : "calib-" + calib.getId())
+                    .map(r -> r.getCalibrationId() != null && !r.getCalibrationId().isBlank() ? r.getCalibrationId() : "calib-" + calib.getId())
                     .orElse("calib-" + calib.getId());
         }
         return "calib-" + calib.getId();
