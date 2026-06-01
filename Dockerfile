@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Create a non-root user
 RUN addgroup --system spring && adduser --system spring --ingroup spring
+RUN mkdir -p /tmp/calibration-runs && chown spring:spring /tmp/calibration-runs
 USER spring:spring
 
 # Environment Variables
