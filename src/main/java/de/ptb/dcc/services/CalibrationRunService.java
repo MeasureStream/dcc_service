@@ -1,6 +1,5 @@
 package de.ptb.dcc.services;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.ptb.dcc.dtos.CalibrationDto;
 import de.ptb.dcc.dtos.CalibrationRunConfig;
@@ -15,12 +14,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -61,17 +58,20 @@ public class CalibrationRunService {
     private final SensorRepository sensorRepo;
     private final PythonBridgeService pythonBridge;
     private final CalibrationWizardService wizardService;
+    private final SensorCoefficientUpdater sensorCoeffUpdater;
 
     public CalibrationRunService(CalibrationRepository calibrationRepo,
                                   CalibrationRequestRepository requestRepo,
                                   SensorRepository sensorRepo,
                                   PythonBridgeService pythonBridge,
-                                  CalibrationWizardService wizardService) {
+                                  CalibrationWizardService wizardService,
+                                  SensorCoefficientUpdater sensorCoeffUpdater) {
         this.calibrationRepo = calibrationRepo;
         this.requestRepo = requestRepo;
         this.sensorRepo = sensorRepo;
         this.pythonBridge = pythonBridge;
         this.wizardService = wizardService;
+        this.sensorCoeffUpdater = sensorCoeffUpdater;
     }
 
     // ── Public API ─────────────────────────────────────────────────────────
@@ -102,7 +102,6 @@ public class CalibrationRunService {
      * Launches analisi_calib_data.py synchronously.
      * Writes all outputs to runs/<runId>/, persists results in the Calibration entity.
      */
-    @Transactional
     public CalibrationDto runCalibration(Long calibrationId, CalibrationRunConfig config) {
         Calibration calib = calibrationRepo.findById(calibrationId)
                 .orElseThrow(() -> new RuntimeException("Calibration not found: " + calibrationId));
@@ -120,9 +119,23 @@ public class CalibrationRunService {
         }
 
         // Resolve Sensor from DB — source of truth for current calibration coefficients
-        Sensor sensor = (req.getSensorId() != null)
-                ? sensorRepo.findById(req.getSensorId()).orElse(null)
-                : null;
+        Sensor sensor = null;
+        if (req.getSensorId() != null) {
+            sensor = sensorRepo.findById(req.getSensorId()).orElse(null);
+        }
+        // Fallback: resolve by mu_id when sensor_id is missing or not found
+        if (sensor == null && req.getMuId() != null && req.getMuId() > 0) {
+            var sensors = sensorRepo.findAllByMeasurementUnit_Id(req.getMuId());
+            if (!sensors.isEmpty()) {
+                sensor = sensors.get(0);
+                log.warn("[CalibRunService] sensor_id={} not found — resolved sensor via mu_id={} → sensor.id={}",
+                        req.getSensorId(), req.getMuId(), sensor.getId());
+            }
+        }
+        if (sensor == null) {
+            log.warn("[CalibRunService] No sensor resolved (sensor_id={}, mu_id={}) — coefficients will NOT be updated",
+                    req.getSensorId(), req.getMuId());
+        }
 
         // Read current DB coefficients to pass as --old-a/b/c/d to the Python script.
         // null = not yet calibrated (first run) → Python uses its engine defaults.
@@ -131,8 +144,8 @@ public class CalibrationRunService {
         Double oldC = (sensor != null) ? sensor.getCoeffC() : null;
         Double oldD = (sensor != null) ? sensor.getCoeffD() : null;
 
-        log.info("[CalibRunService] sensor={} coeffs from DB: A={} B={} C={} D={}",
-                req.getSensorId(), oldA, oldB, oldC, oldD);
+        log.info("[CalibRunService] resolved sensor.id={}, coeffs from DB: A={} B={} C={} D={}",
+                sensor != null ? sensor.getId() : null, oldA, oldB, oldC, oldD);
 
         String runId = deriveRunId(calib);
         Path runsBase   = resolveRunsDir();
@@ -212,8 +225,10 @@ public class CalibrationRunService {
             calibrationRepo.save(calib);
 
             // 8. On success: extract new coefficients from resultJson and persist to Sensor
+            //    Runs in a REQUIRES_NEW transaction so it commits even if the outer
+            //    transaction (held for the Python subprocess duration) has timed out.
             if (result.exitCode() == 0 && resultJson != null && sensor != null) {
-                updateSensorCoefficients(sensor, resultJson);
+                sensorCoeffUpdater.update(sensor.getId(), resultJson);
             }
 
             log.info("[CalibRunService] run {} completed with exit={}", runId, result.exitCode());
@@ -229,82 +244,6 @@ public class CalibrationRunService {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
-
-    /**
-     * Extracts new calibration coefficients from the filled certificate JSON and writes
-     * them back to the Sensor entity in the database.
-     *
-     * Coefficient mapping from _calibration_result:
-     *   linear / linear_interp : _A → coeffA,  _B → coeffB,  coeffC=0, coeffD=0
-     *   cubic  / cubic_interp  : _a0→ coeffA, _a1→ coeffB, _a2→ coeffC, _a3→ coeffD
-     *   cube-log               : _C0→ coeffA, _C1→ coeffB, _C3→ coeffC, coeffD=0
-     *
-     * On any parse error this method logs a warning and returns without throwing,
-     * so a parse failure never causes the overall run to be marked FAILED.
-     */
-    private void updateSensorCoefficients(Sensor sensor, String resultJson) {
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(resultJson);
-            JsonNode calibResult = root.path("_calibration_result");
-            if (calibResult.isMissingNode()) {
-                log.warn("[CalibRunService] _calibration_result missing from resultJson — skipping coeff update");
-                return;
-            }
-
-            String model = calibResult.path("_calib_model").asText("");
-            Double newA = null, newB = null, newC = null, newD = null;
-
-            switch (model) {
-                case "linear", "linear_interp" -> {
-                    newA = jsonDouble(calibResult, "_A");
-                    newB = jsonDouble(calibResult, "_B");
-                    newC = 0.0;
-                    newD = 0.0;
-                }
-                case "cubic", "cubic_interp" -> {
-                    newA = jsonDouble(calibResult, "_a0");
-                    newB = jsonDouble(calibResult, "_a1");
-                    newC = jsonDouble(calibResult, "_a2");
-                    newD = jsonDouble(calibResult, "_a3");
-                }
-                case "cube-log" -> {
-                    newA = jsonDouble(calibResult, "_C0");
-                    newB = jsonDouble(calibResult, "_C1");
-                    newC = jsonDouble(calibResult, "_C3");
-                    newD = 0.0;
-                }
-                default -> {
-                    log.warn("[CalibRunService] Unknown calib model '{}' — skipping coeff update", model);
-                    return;
-                }
-            }
-
-            if (newA == null || newB == null) {
-                log.warn("[CalibRunService] Could not extract A/B coefficients for model '{}' — skipping", model);
-                return;
-            }
-
-            sensor.setCoeffA(newA);
-            sensor.setCoeffB(newB);
-            sensor.setCoeffC(newC);
-            sensor.setCoeffD(newD);
-            sensor.setCalDate(Instant.now().toEpochMilli());
-            sensorRepo.save(sensor);
-
-            log.info("[CalibRunService] Sensor {} coefficients updated: model={} A={} B={} C={} D={}",
-                    sensor.getId(), model, newA, newB, newC, newD);
-
-        } catch (Exception e) {
-            log.warn("[CalibRunService] Failed to update sensor coefficients: {}", e.getMessage(), e);
-        }
-    }
-
-    /** Reads a double field from a JsonNode; returns null if absent or not a number. */
-    private static Double jsonDouble(JsonNode node, String field) {
-        JsonNode n = node.path(field);
-        return n.isNumber() ? n.doubleValue() : null;
-    }
 
     /** Derives the run ID from the linked CalibrationRequest's calibrationId, or uses "calib-<id>" fallback. */
     private String deriveRunId(Calibration calib) {

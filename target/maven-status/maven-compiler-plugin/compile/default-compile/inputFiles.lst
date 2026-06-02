@@ -55,6 +55,7 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Calibra
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\CalibratorRequest.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\KafkaCalibrationRequestConsumer.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\SensorCoefficientUpdater.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\CalibrationRunService.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationRunConfigOptions.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\MeasurestreamCompanyRepository.java

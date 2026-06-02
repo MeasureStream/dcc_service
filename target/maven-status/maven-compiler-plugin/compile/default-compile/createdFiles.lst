@@ -9,6 +9,7 @@ de\ptb\dcc\services\DccSigningService$SigningResult.class
 de\ptb\dcc\dtos\ConformityVerificationResultDto$ConformityImageDto.class
 de\ptb\dcc\dtos\DccCreateRequest.class
 de\ptb\dcc\repositories\DccRepository.class
+de\ptb\dcc\services\SensorCoefficientUpdater.class
 de\ptb\dcc\DccServiceApplication.class
 de\ptb\dcc\services\PythonBridgeService$CalibrationRunResult.class
 de\ptb\dcc\services\KafkaCalibrationConsumer.class
