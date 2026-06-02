@@ -26,7 +26,7 @@ import java.util.List;
  *
  * Formato messaggio Kafka:
  * {
- *   "calib_id": "calib-1-1-20260422T175123",
+ *   "calib_id": "calib-{muId}-{sensorId}-{timestamp}",   // es: "calib-1-1-20260422T175123"
  *   "target": -22.5,
  *   "step_index": 0,
  *   "step_summary": [{"target":-22.5,"minutes":1}, {"target":94.5,"minutes":1}],
@@ -40,7 +40,6 @@ import java.util.List;
  * Formato CalibrationRequest assemblata (calib_20_45_30_40.json):
  * {
  *   "calibration_id": "calib-1-1-20260422T175123",
- *   "calibrator_id": 1,
  *   "mu_id": 1,
  *   "sensor_id": 1,
  *   "sensor_sampling_freq": [1, 1],
@@ -143,20 +142,20 @@ public class KafkaCalibrationConsumer {
         }
 
         try {
-            // ── Parse calib_id: calib-{calibratorId}-{muId}-{timestamp} ─
-            long calibratorId = 0L;
+            // ── Parse calib_id: calib-{muId}-{sensorId}-{timestamp} ─
             long muId = 0L;
+            long sensorId = 0L;
             try {
-                // formato: calib-{calibratorId}-{muId}-{timestamp}
+                // formato: calib-{muId}-{sensorId}-{timestamp}
                 // es: calib-1-1-20260422T175123
                 String[] parts = calibId.split("-");
-                // parts[0]="calib", parts[1]=calibratorId, parts[2]=muId, parts[3..]=timestamp
+                // parts[0]="calib", parts[1]=muId, parts[2]=sensorId, parts[3..]=timestamp
                 if (parts.length >= 3) {
-                    calibratorId = Long.parseLong(parts[1]);
-                    muId = Long.parseLong(parts[2]);
+                    muId = Long.parseLong(parts[1]);
+                    sensorId = Long.parseLong(parts[2]);
                 }
             } catch (NumberFormatException e) {
-                logger.warn("Cannot parse calibratorId/muId from calib_id={}", calibId);
+                logger.warn("Cannot parse muId/sensorId from calib_id={}", calibId);
             }
 
             // ── Leggi il primo messaggio per step_summary ────────────────
@@ -166,9 +165,8 @@ public class KafkaCalibrationConsumer {
             // ── Costruisci il JSON nel formato CalibrationRequest ────────
             ObjectNode result = objectMapper.createObjectNode();
             result.put("calibration_id", calibId);
-            result.put("calibrator_id", calibratorId);
             result.put("mu_id", muId);
-            result.put("sensor_id", muId); // sensor_id = muId di default, può essere risolto dopo
+            result.put("sensor_id", sensorId);
 
             // sensor_sampling_freq: array con il valore di ogni step
             ArrayNode freqArray = result.putArray("sensor_sampling_freq");
@@ -278,9 +276,8 @@ public class KafkaCalibrationConsumer {
 
             CalibrationRequest req = new CalibrationRequest();
             req.setCalibrationId(calibId);
-            req.setCalibratorId(calibratorId);
             req.setMuId(muId);
-            req.setSensorId(muId); // default, da risolvere
+            req.setSensorId(sensorId);
             req.setInputJson(inputJsonAgg);
             req.setProcessedJson(processedJson);
             req.setProcessed(true);
