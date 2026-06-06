@@ -76,6 +76,10 @@ public class Dcc {
     @Column(name = "calibration_request_id")
     private Long calibrationRequestId;
 
+    /** Se true il DCC è stato archiviato (superato da un nuovo DCC effective per lo stesso sensor) */
+    @Column(name = "archived", nullable = false)
+    private boolean archived = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
@@ -221,5 +225,13 @@ public class Dcc {
 
     public void setCalibrationRequestId(Long calibrationRequestId) {
         this.calibrationRequestId = calibrationRequestId;
+    }
+
+    public boolean isArchived() {
+        return archived;
+    }
+
+    public void setArchived(boolean archived) {
+        this.archived = archived;
     }
 }

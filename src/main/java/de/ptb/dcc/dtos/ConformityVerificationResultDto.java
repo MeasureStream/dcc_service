@@ -11,7 +11,7 @@ import java.util.List;
 public class ConformityVerificationResultDto {
 
     private boolean success;        // true if the Python process exited with code 0
-    private String  overall;        // "CONFORME" | "NON CONFORME" | "ERROR"
+    private String  overall;        // "CONFORMING" | "NON-CONFORMING" | "ERROR"
     private String  log;            // full captured stdout+stderr from the script
     private List<ConformityImageDto> images;
 

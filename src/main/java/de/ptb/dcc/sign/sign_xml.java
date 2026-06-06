@@ -33,18 +33,10 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
-/**
- * XML Digital Signature Tool for DCC Documents
- *
- * This class signs XML files using XML Digital Signatures (XAdES-BES)
- * according to the XML-DSig and XAdES standards (ETSI EN 319 132-1).
- */
+// XAdES-BES  signing, usa  XML-DSig con SHA256
 public class sign_xml {
     private static final String XADES_NS = "http://uri.etsi.org/01903/v1.3.2#";
-    // libxml2/lxml-based schema validators often choke on very large certificate
-    // serial numbers
-    // (even though xs:integer is unbounded). Keep serial within signed 63-bit
-    // range.
+    // serial  deve stare sotto 63 bit o i validatori piangono
     private static final int MAX_SERIAL_BIT_LENGTH = 63;
 
     static {
@@ -105,41 +97,34 @@ public class sign_xml {
         dbf.setNamespaceAware(true);
         Document doc = dbf.newDocumentBuilder().parse(new FileInputStream(input));
 
-        // 1. Create XMLSignature
         String sigId = "sig-" + UUID.randomUUID();
         XMLSignature sig = new XMLSignature(doc, "", XMLSignature.ALGO_ID_SIGNATURE_RSA_SHA256);
         doc.getDocumentElement().appendChild(sig.getElement());
         sig.getElement().setAttribute("Id", sigId);
         sig.getElement().setIdAttribute("Id", true);
 
-        // 2. Reference 1: Entire Document (Enveloped)
         Transforms transforms = new Transforms(doc);
         transforms.addTransform(Transforms.TRANSFORM_ENVELOPED_SIGNATURE);
         transforms.addTransform(Transforms.TRANSFORM_C14N_EXCL_OMIT_COMMENTS);
         sig.addDocument("", transforms, "http://www.w3.org/2001/04/xmlenc#sha256");
 
-        // 3. Create XAdES Structure
         String xadesId = "xades-" + UUID.randomUUID();
         Element qualifyingProperties = doc.createElementNS(XADES_NS, "xades:QualifyingProperties");
         qualifyingProperties.setAttribute("Target", "#" + sigId);
 
         Element signedProperties = doc.createElementNS(XADES_NS, "xades:SignedProperties");
         signedProperties.setAttribute("Id", xadesId);
-        // CRITICAL: We don't call setIdAttribute yet because it's not in the document
-        // tree
         qualifyingProperties.appendChild(signedProperties);
 
         Element signedSignatureProperties = doc.createElementNS(XADES_NS, "xades:SignedSignatureProperties");
         signedProperties.appendChild(signedSignatureProperties);
 
-        // SigningTime
         Element signingTime = doc.createElementNS(XADES_NS, "xades:SigningTime");
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
         signingTime.setTextContent(sdf.format(new Date()));
         signedSignatureProperties.appendChild(signingTime);
 
-        // SigningCertificate
         Element signingCertificate = doc.createElementNS(XADES_NS, "xades:SigningCertificate");
         signedSignatureProperties.appendChild(signingCertificate);
         Element certElem = doc.createElementNS(XADES_NS, "xades:Cert");
@@ -164,13 +149,11 @@ public class sign_xml {
         serialNum.setTextContent(cert.getSerialNumber().toString());
         issuerSerial.appendChild(serialNum);
 
-        // 4. Wrap XAdES in an Object and add to signature
         ObjectContainer obj = new ObjectContainer(doc);
         obj.getElement().appendChild(qualifyingProperties);
         sig.appendObject(obj);
 
-        // 5. Reference 2: SignedProperties (XAdES part) - CRITICAL for XAdES compliance
-        // NOW register ID after appending to document
+        // rif  SignedProperties —  obbligatorio per XAdES
         signedProperties.setIdAttribute("Id", true);
 
         Transforms xadesTransforms = new Transforms(doc);
@@ -178,22 +161,18 @@ public class sign_xml {
         sig.addDocument("#" + xadesId, xadesTransforms, "http://www.w3.org/2001/04/xmlenc#sha256", null,
                 "http://uri.etsi.org/01903#SignedProperties");
 
-        // 6. Add KeyInfo with Id attribute (for Reference 3)
         sig.addKeyInfo(cert);
         String keyInfoId = "keyinfo-" + UUID.randomUUID();
         Element keyInfoElement = sig.getKeyInfo().getElement();
         keyInfoElement.setAttribute("Id", keyInfoId);
         keyInfoElement.setIdAttribute("Id", true);
 
-        // 7. Reference 3: KeyInfo - required by signxml XAdESVerifier (expects 3 refs)
         Transforms keyInfoTransforms = new Transforms(doc);
         keyInfoTransforms.addTransform(Transforms.TRANSFORM_C14N_EXCL_OMIT_COMMENTS);
         sig.addDocument("#" + keyInfoId, keyInfoTransforms, "http://www.w3.org/2001/04/xmlenc#sha256");
 
-        // 8. Sign
         sig.sign(key);
 
-        // 9. Save output
         TransformerFactory tf = TransformerFactory.newInstance();
         Transformer transformer = tf.newTransformer();
         FileOutputStream fos = new FileOutputStream(output);
@@ -219,7 +198,6 @@ public class sign_xml {
     private static X509Certificate regenerateSelfSignedCertificateWithSmallSerial(PrivateKey privateKey,
             String subjectRfc2253)
             throws Exception {
-        // Derive public key from private key
         KeyFactory kf = KeyFactory.getInstance("RSA");
         PublicKey publicKey = kf.generatePublic(new java.security.spec.RSAPublicKeySpec(
                 ((java.security.interfaces.RSAPrivateCrtKey) privateKey).getModulus(),

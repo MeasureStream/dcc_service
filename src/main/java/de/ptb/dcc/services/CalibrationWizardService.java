@@ -4,8 +4,10 @@ import de.ptb.dcc.dtos.CalibrationDto;
 import de.ptb.dcc.dtos.WizardStepRequest;
 import de.ptb.dcc.entities.Calibration;
 import de.ptb.dcc.entities.CalibrationRequest;
+import de.ptb.dcc.entities.Sensor;
 import de.ptb.dcc.repositories.CalibrationRepository;
 import de.ptb.dcc.repositories.CalibrationRequestRepository;
+import de.ptb.dcc.repositories.SensorRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
@@ -25,15 +27,18 @@ public class CalibrationWizardService {
 
     private final CalibrationRepository calibrationRepo;
     private final CalibrationRequestRepository requestRepo;
+    private final SensorRepository sensorRepo;
     private final PythonBridgeService pythonBridge;
     private final CalibrationWizardInserter inserter;
 
     public CalibrationWizardService(CalibrationRepository calibrationRepo,
                                      CalibrationRequestRepository requestRepo,
+                                     SensorRepository sensorRepo,
                                      PythonBridgeService pythonBridge,
                                      CalibrationWizardInserter inserter) {
         this.calibrationRepo = calibrationRepo;
         this.requestRepo = requestRepo;
+        this.sensorRepo = sensorRepo;
         this.pythonBridge = pythonBridge;
         this.inserter = inserter;
     }
@@ -41,24 +46,38 @@ public class CalibrationWizardService {
     /**
      * Init wizard: trova la Calibration esistente per questa CalibrationRequest,
      * oppure la crea via inserter (REQUIRES_NEW, gestisce duplicati).
+     * All steps are pre-filled with classpath templates.
+     * Job JSON is populated with sensor model_name and serial_number.
      */
     public CalibrationDto initWizard(Long calibrationRequestId, String userSub) {
-        return calibrationRepo.findByCalibrationRequestId(calibrationRequestId)
+        CalibrationRequest req = requestRepo.findById(calibrationRequestId)
+                .orElseThrow(() -> new RuntimeException("CalibrationRequest not found: " + calibrationRequestId));
+
+        final Long sensorId = req.getSensorId();
+        final String modelName = sensorId != null
+                ? sensorRepo.findById(sensorId).map(Sensor::getModelName).orElse(null)
+                : null;
+
+        CalibrationDto dto = calibrationRepo.findByCalibrationRequestId(calibrationRequestId)
                 .map(this::toDto)
                 .orElseGet(() -> {
-                    CalibrationRequest req = requestRepo.findById(calibrationRequestId)
-                            .orElseThrow(() -> new RuntimeException("CalibrationRequest not found: " + calibrationRequestId));
-
                     Calibration calib = new Calibration();
                     calib.setCalibrationRequestId(calibrationRequestId);
                     calib.setMuId(req.getMuId() != null ? req.getMuId() : 0L);
                     calib.setSub(userSub);
                     calib.setCalibrationData("{}");
                     calib.setBaseInputJson(loadBaseInput());
-                    calib.setJobJson(generateJobJson(req));
+                    calib.setCalibrationMethodJson(loadCalibrationMethodTemplate());
+                    calib.setMeasurestreamCompanyJson(loadMeasurestreamCompanyTemplate());
+                    calib.setClientCompanyJson(loadClientCompanyTemplate());
+                    calib.setJobJson(generateJobJson(req, sensorId, modelName));
 
                     return toDto(inserter.findOrInsert(calibrationRequestId, calib));
                 });
+
+        dto.setSensorId(sensorId);
+        dto.setSensorModelName(modelName);
+        return dto;
     }
 
     @Transactional
@@ -118,7 +137,46 @@ public class CalibrationWizardService {
         }
     }
 
-    private String generateJobJson(CalibrationRequest req) {
+    private String loadCalibrationMethodTemplate() {
+        try {
+            return new ClassPathResource("calibration_templates/calibration_method.json")
+                    .getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.error("[Wizard] Could not load calibration_method.json: {}", e.getMessage());
+            return "{}";
+        }
+    }
+
+    private String loadMeasurestreamCompanyTemplate() {
+        try {
+            return new ClassPathResource("calibration_templates/measurestream_company.json")
+                    .getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.error("[Wizard] Could not load measurestream_company.json: {}", e.getMessage());
+            return "{}";
+        }
+    }
+
+    private String loadClientCompanyTemplate() {
+        try {
+            return new ClassPathResource("calibration_templates/client_company.json")
+                    .getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.error("[Wizard] Could not load client_company.json: {}", e.getMessage());
+            return "{}";
+        }
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    private String generateJobJson(CalibrationRequest req, Long sensorId, String modelName) {
         String today = LocalDate.now().format(DATE_FMT);
         String measurementDate = req.getCreatedAt() != null
                 ? req.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
@@ -126,11 +184,14 @@ public class CalibrationWizardService {
         String certId  = "MS-CAL-" + today.substring(0, 4) + "-" + String.format("%05d", req.getId());
         String certNum = today.substring(0, 4) + "/CAL/" + String.format("%05d", req.getId());
 
+        String serialNum = sensorId != null ? sensorId.toString() : "";
+        String model = modelName != null ? modelName : "";
+
         return "{\n" +
                "  \"calibration_specific_data\": {\n" +
                "    \"certificate_id\": \"" + certId + "\",\n" +
                "    \"certificate_number\": \"" + certNum + "\",\n" +
-               "    \"asset_id\": \"MST-ASSET-" + String.format("%05d", req.getSensorId() != null ? req.getSensorId() : 0) + "\",\n" +
+               "    \"asset_id\": \"MST-ASSET-" + String.format("%05d", sensorId != null ? sensorId : 0) + "\",\n" +
                "    \"lab_reference\": \"LAB-REF-" + today.substring(0, 4) + "-" + String.format("%04d", req.getId()) + "\",\n" +
                "    \"document_id\": \"" + certId + "\",\n" +
                "    \"issue_date\": \"" + today + "\",\n" +
@@ -144,8 +205,8 @@ public class CalibrationWizardService {
                "    }\n" +
                "  },\n" +
                "  \"sensor_method_template\": {\n" +
-               "    \"model\": \"\",\n" +
-               "    \"serial_number\": \"\"\n" +
+               "    \"model\": \"" + escapeJson(model) + "\",\n" +
+               "    \"serial_number\": \"" + escapeJson(serialNum) + "\"\n" +
                "  },\n" +
                "  \"organization_data\": {\n" +
                "    \"authorised_by\": \"\",\n" +

@@ -9,16 +9,13 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 
-/**
- * Simple test to verify key loading works
- */
+// carica  chiavi RSA da PEM e verifica che funzionino
 public class test_keys {
 
     public static void main(String[] args) {
         System.out.println("=== Testing Key Loading ===\n");
 
         try {
-            // Test loading keys
             KeyPair keyPair = loadKeys();
             X509Certificate certificate = loadCertificate();
 

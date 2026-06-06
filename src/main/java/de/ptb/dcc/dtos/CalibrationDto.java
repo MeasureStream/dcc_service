@@ -35,6 +35,10 @@ public class CalibrationDto {
     private String pdfOutputUrl;
     private String dccXml;
 
+    // sensor info (resolved at wizard init)
+    private Long sensorId;
+    private String sensorModelName;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -103,4 +107,10 @@ public class CalibrationDto {
 
     public String getDccXml() { return dccXml; }
     public void setDccXml(String v) { this.dccXml = v; }
+
+    public Long getSensorId() { return sensorId; }
+    public void setSensorId(Long v) { this.sensorId = v; }
+
+    public String getSensorModelName() { return sensorModelName; }
+    public void setSensorModelName(String v) { this.sensorModelName = v; }
 }

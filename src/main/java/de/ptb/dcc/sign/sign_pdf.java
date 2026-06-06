@@ -15,9 +15,7 @@ import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.signatures.*;
 import com.itextpdf.kernel.geom.Rectangle;
 
-/**
- * PDF Digital Signature Tool for DCC Documents
- */
+// segna  il PDF con chiave privata e certificato
 public class sign_pdf {
 
     static {

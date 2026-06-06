@@ -1,9 +1,11 @@
 package de.ptb.dcc.controllers;
 
 import de.ptb.dcc.dtos.*;
+import de.ptb.dcc.entities.Calibration;
 import de.ptb.dcc.entities.Dcc;
 import de.ptb.dcc.entities.Sensor;
 import de.ptb.dcc.entities.User;
+import de.ptb.dcc.repositories.CalibrationRepository;
 import de.ptb.dcc.services.CalibrationRunService;
 import de.ptb.dcc.services.DccService;
 import org.slf4j.Logger;
@@ -33,6 +35,7 @@ public class DccController {
 
     private final DccService dccService;
     private final CalibrationRunService calibrationRunService;
+    private final CalibrationRepository calibrationRepository;
 
     @Value("${python.cmd:python}")
     private String pythonCmd;
@@ -43,9 +46,14 @@ public class DccController {
     @Value("${calibration.models.path:}")
     private String calibrationModelsPath;
 
-    public DccController(DccService dccService, CalibrationRunService calibrationRunService) {
+    @Value("${calibration.runs.path:./calibration-runs}")
+    private String calibrationRunsPath;
+
+    public DccController(DccService dccService, CalibrationRunService calibrationRunService,
+                         CalibrationRepository calibrationRepository) {
         this.dccService = dccService;
         this.calibrationRunService = calibrationRunService;
+        this.calibrationRepository = calibrationRepository;
     }
 
     // -------------------------------------------------------------------------
@@ -179,6 +187,41 @@ public class DccController {
                 .body(content);
     }
 
+    @GetMapping("/api/dcc/{dccId}/download/calibration-result")
+    public ResponseEntity<byte[]> downloadCalibrationResult(@PathVariable Long dccId) {
+        try {
+            Dcc dcc = dccService.getDcc(dccId)
+                    .orElseThrow(() -> new RuntimeException("DCC not found"));
+
+            if (dcc.getCalibrationRequestId() == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Calibration calib = calibrationRepository.findByCalibrationRequestId(dcc.getCalibrationRequestId())
+                    .orElseThrow(() -> new RuntimeException("Calibration not found for this DCC"));
+
+            if (calib.getRunId() == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Path runsBase = Path.of(calibrationRunsPath).toAbsolutePath().normalize();
+            Path pdfPath = runsBase.resolve(calib.getRunId()).resolve("output").resolve("ntc_cert_funzione.pdf");
+
+            if (!Files.exists(pdfPath)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            byte[] content = Files.readAllBytes(pdfPath);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"calibration-result-dcc-" + dccId + ".pdf\"")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                    .body(content);
+        } catch (Exception e) {
+            log.error("[DccController] downloadCalibrationResult error: {}", e.getMessage(), e);
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     // -------------------------------------------------------------------------
     // SENSORS — lista sensori disponibili per linkare un DCC
     // admin: tutti, utente normale: solo quelli delle proprie CU
@@ -295,13 +338,13 @@ public class DccController {
             log.info("[DccController] verifyConformity exit={}", exitCode);
 
             // 7. Determine overall verdict from log
-            // Note: check "NON CONFORME" before "CONFORME" since the latter is a substring of the former
+            // Note: check "NON-CONFORMING" before "CONFORMING" since the latter is a substring of the former
             String overall = "ERROR";
             if (exitCode == 0) {
-                if (output.contains("OVERALL VERDICT: NON CONFORME")) {
-                    overall = "NON CONFORME";
-                } else if (output.contains("OVERALL VERDICT: CONFORME")) {
-                    overall = "CONFORME";
+                if (output.contains("OVERALL VERDICT: NON-CONFORMING")) {
+                    overall = "NON-CONFORMING";
+                } else if (output.contains("OVERALL VERDICT: CONFORMING")) {
+                    overall = "CONFORMING";
                 } else {
                     overall = "UNKNOWN";
                 }

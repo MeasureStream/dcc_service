@@ -20,6 +20,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -146,11 +147,13 @@ public class DccService {
 
     @Transactional
     public Dcc createDcc(String sensorId, String name, String dccJson, Long calibrationRequestId) {
+        if (!isAdmin()) throw new AccessDeniedException("Only admins can create DCCs");
         Dcc dcc = new Dcc();
         dcc.setName(name);
         dcc.setDccJson(dccJson != null ? dccJson : "{}");
         dcc.setCreatedBy(getCurrentUserId());
         dcc.setUser(getOrCreateCurrentUser());
+        dcc.setCalibrationDate(OffsetDateTime.now());
 
         if (calibrationRequestId != null) {
             dcc.setCalibrationRequestId(calibrationRequestId);
@@ -191,9 +194,8 @@ public class DccService {
     // -------------------------------------------------------------------------
     @Transactional
     public Optional<Dcc> updateDcc(Long dccId, DccUpdateRequest request) {
-        Optional<Dcc> existingDcc = isAdmin()
-                ? dccRepository.findById(dccId)
-                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId());
+        if (!isAdmin()) throw new AccessDeniedException("Only admins can update DCCs");
+        Optional<Dcc> existingDcc = dccRepository.findById(dccId);
 
         return existingDcc.map(dcc -> {
             if (request.getName() != null)
@@ -232,10 +234,10 @@ public class DccService {
     // -------------------------------------------------------------------------
     @Transactional
     public Dcc validateDcc(Long dccId, String fileType) {
+        if (!isAdmin()) throw new AccessDeniedException("Only admins can validate/sign DCCs");
         System.out.println("=== VALIDATE DCC STARTED ===");
 
-        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
-                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+        Dcc dcc = dccRepository.findById(dccId)
                 .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
 
         System.out.println("DCC found: " + dcc.getName());
@@ -321,8 +323,8 @@ public class DccService {
     // -------------------------------------------------------------------------
     @Transactional
     public Dcc updateDccJson(Long dccId, String dccJson) {
-        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
-                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+        if (!isAdmin()) throw new AccessDeniedException("Only admins can update DCC JSON");
+        Dcc dcc = dccRepository.findById(dccId)
                 .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
         dcc.setDccJson(dccJson);
         return dccRepository.save(dcc);
@@ -333,18 +335,24 @@ public class DccService {
     // -------------------------------------------------------------------------
     @Transactional
     public Dcc publishDcc(Long dccId) {
-        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
-                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+        if (!isAdmin()) throw new AccessDeniedException("Only admins can publish DCCs");
+        Dcc dcc = dccRepository.findById(dccId)
                 .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
 
-        dcc.setPublishedAt(OffsetDateTime.now());
+        if (!dcc.isPdfValid() || !dcc.isXmlValid()) {
+            throw new IllegalStateException("DCC must be signed before it can be made effective");
+        }
 
-        // unpubblica eventuali precedenti DCC pubblicati per lo stesso sensore
+        dcc.setPublishedAt(OffsetDateTime.now());
+        dcc.setArchived(false);
+
+        // archivia eventuali precedenti DCC pubblicati per lo stesso sensore
         if (dcc.getSensor() != null) {
             List<Dcc> previousDccs = dccRepository.findBySensorAndPublishedAtIsNotNull(dcc.getSensor());
             for (Dcc prev : previousDccs) {
                 if (!prev.getId().equals(dcc.getId())) {
                     prev.setPublishedAt(null);
+                    prev.setArchived(true);
                     dccRepository.save(prev);
                 }
             }
@@ -355,8 +363,8 @@ public class DccService {
 
     @Transactional
     public Dcc unpublishDcc(Long dccId) {
-        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
-                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+        if (!isAdmin()) throw new AccessDeniedException("Only admins can unpublish DCCs");
+        Dcc dcc = dccRepository.findById(dccId)
                 .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
         dcc.setPublishedAt(null);
         return dccRepository.save(dcc);
@@ -367,8 +375,8 @@ public class DccService {
     // -------------------------------------------------------------------------
     @Transactional
     public void deleteDcc(Long dccId) {
-        Dcc dcc = (isAdmin() ? dccRepository.findById(dccId)
-                : dccRepository.findByIdAndUser_UserId(dccId, getCurrentUserId()))
+        if (!isAdmin()) throw new AccessDeniedException("Only admins can delete DCCs");
+        Dcc dcc = dccRepository.findById(dccId)
                 .orElseThrow(() -> new EntityNotFoundException("DCC not found"));
         dccRepository.delete(dcc);
     }
@@ -486,14 +494,17 @@ public class DccService {
         dto.setHashXml(dcc.getHashXml());
         dto.setHashPdf(dcc.getHashPdf());
         dto.setCalibrationRequestId(dcc.getCalibrationRequestId());
+        dto.setArchived(dcc.isArchived());
         dto.setStatus(calculateStatus(dcc));
         return dto;
     }
 
     private String calculateStatus(Dcc dcc) {
+        if (dcc.isArchived()) return "ARCHIVED";
+        if (dcc.getSensor() == null) return "GREY";
         if (!dcc.isPdfValid() || !dcc.isXmlValid()) return "RED";
-        OffsetDateTime now = OffsetDateTime.now();
-        if (dcc.getExpirationDate() == null || dcc.getExpirationDate().isBefore(now)) return "YELLOW";
+        if (dcc.getPublishedAt() != null) return "BLUE";
+        if (dcc.getExpirationDate() != null && dcc.getExpirationDate().isBefore(OffsetDateTime.now())) return "YELLOW";
         return "GREEN";
     }
 

@@ -22,6 +22,7 @@ public class DccDto {
     private String hashXml;
     private String hashPdf;
     private Long calibrationRequestId;
+    private boolean archived;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -79,4 +80,7 @@ public class DccDto {
 
     public Long getCalibrationRequestId() { return calibrationRequestId; }
     public void setCalibrationRequestId(Long calibrationRequestId) { this.calibrationRequestId = calibrationRequestId; }
+
+    public boolean isArchived() { return archived; }
+    public void setArchived(boolean archived) { this.archived = archived; }
 }

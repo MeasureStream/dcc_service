@@ -13,11 +13,7 @@ import java.util.Set;
 import java.security.Security;
 import java.security.cert.X509Certificate;
 
-/**
- * XML Signature Verification Tool for DCC Documents
- *
- * This class validates the XAdES digital signature and prints diagnostic details.
- */
+// verifica  firma XAdES e stampa i dettagli del certificato
 public class verify_xml {
     static {
         Init.init();
@@ -45,7 +41,6 @@ public class verify_xml {
             dbf.setNamespaceAware(true);
             Document doc = dbf.newDocumentBuilder().parse(new FileInputStream(file));
 
-            // Mark all 'Id' attributes for resolution
             NodeList nodes = doc.getElementsByTagName("*");
             for (int i = 0; i < nodes.getLength(); i++) {
                 Element el = (Element) nodes.item(i);
@@ -88,7 +83,6 @@ public class verify_xml {
                 System.out.println("  Ref [" + i + "] URI: " + uri + " | Type: " + sig.getSignedInfo().item(i).getType());
             }
 
-            // Basic XAdES-BES sanity checks:
             if (refCount < 2) {
                 System.out.println("\n[FAILURE] XAdES requires at least 2 references (document + SignedProperties). Found: " + refCount);
             } else {
