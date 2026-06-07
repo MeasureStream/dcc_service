@@ -87,7 +87,7 @@ public class Calibration {
     @Column(name = "run_log", columnDefinition = "TEXT")
     private String runLog;
 
-    /** Contenuto di conformity.json generato da verifica_conformita */
+    /** Contenuto di conformity.json generato da run_validation */
     @Column(name = "conformity_json", columnDefinition = "TEXT")
     private String conformityJson;
 
