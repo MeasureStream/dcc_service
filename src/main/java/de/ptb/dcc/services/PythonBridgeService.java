@@ -209,7 +209,9 @@ public class PythonBridgeService {
         }
         if (!config.isCharts())        { cmd.add("--no-charts"); }
         if (!config.isVerbose())       { cmd.add("--no-verbose"); }
-        if (config.isUpdateIfOutRange()){ cmd.add("--update-parameters-if-out-range-error"); }
+        if (!"none".equals(config.getUpdateIfOutRange())) {
+            cmd.add("--update-parameters"); cmd.add(config.getUpdateIfOutRange());
+        }
         if (config.isCheckUnits())     { cmd.add("--check-units"); }
         if (config.isConvertUnits())   { cmd.add("--convert-units"); }
         if (config.isNoPdf())          { cmd.add("--no-pdf"); }

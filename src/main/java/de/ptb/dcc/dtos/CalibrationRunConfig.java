@@ -26,8 +26,12 @@ public class CalibrationRunConfig {
     /** Verbose stdout output (default: true) */
     private boolean verbose = true;
 
-    /** Skip calibration update when all as-found errors are within limits (default: false) */
-    private boolean updateIfOutRange = false;
+    /**
+     * Parameter update strategy: none (do not adjust), always (adjust regardless),
+     * if-out-of-tolerance (adjust only when as-found errors exceed limits).
+     * Default: none
+     */
+    private String updateIfOutRange = "none";
 
     /** Enable dimensional unit checks (default: false) */
     private boolean checkUnits = false;
@@ -58,8 +62,8 @@ public class CalibrationRunConfig {
     public boolean isVerbose() { return verbose; }
     public void setVerbose(boolean v) { this.verbose = v; }
 
-    public boolean isUpdateIfOutRange() { return updateIfOutRange; }
-    public void setUpdateIfOutRange(boolean v) { this.updateIfOutRange = v; }
+    public String getUpdateIfOutRange() { return updateIfOutRange; }
+    public void setUpdateIfOutRange(String v) { this.updateIfOutRange = v; }
 
     public boolean isCheckUnits() { return checkUnits; }
     public void setCheckUnits(boolean v) { this.checkUnits = v; }
