@@ -207,7 +207,8 @@ public class PythonBridgeService {
         if (config.getProcedure() != null && !config.getProcedure().isBlank()) {
             cmd.add("--procedure"); cmd.add(config.getProcedure());
         }
-        if (!config.isCharts())        { cmd.add("--no-charts"); }
+        if (config.isCharts())          { cmd.add("--charts"); }
+        else                            { cmd.add("--no-charts"); }
         if (!config.isVerbose())       { cmd.add("--no-verbose"); }
         if (!"none".equals(config.getUpdateIfOutRange())) {
             cmd.add("--update-parameters"); cmd.add(config.getUpdateIfOutRange());
