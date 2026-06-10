@@ -199,10 +199,16 @@ public class PythonBridgeService {
 
         // Inject previous calibration coefficients from DB so Python uses them as old_A/B/C/D
         // These override the 0.0 placeholders in the sensor JSON template.
+        // C and D are only meaningful for cubic procedures; passing them to linear
+        // causes argparse errors when values are malformed or null.
+        boolean isCubic = config.getProcedure() != null
+                && (config.getProcedure().equalsIgnoreCase("cubic")
+                    || config.getProcedure().equalsIgnoreCase("cubic_interp")
+                    || config.getProcedure().equalsIgnoreCase("cube-log"));
         if (oldA != null) { cmd.add("--old-a"); cmd.add(String.valueOf(oldA)); }
         if (oldB != null) { cmd.add("--old-b"); cmd.add(String.valueOf(oldB)); }
-        if (oldC != null) { cmd.add("--old-c"); cmd.add(String.valueOf(oldC)); }
-        if (oldD != null) { cmd.add("--old-d"); cmd.add(String.valueOf(oldD)); }
+        if (isCubic && oldC != null) { cmd.add("--old-c"); cmd.add(String.valueOf(oldC)); }
+        if (isCubic && oldD != null) { cmd.add("--old-d"); cmd.add(String.valueOf(oldD)); }
 
         if (config.getProcedure() != null && !config.getProcedure().isBlank()) {
             cmd.add("--procedure"); cmd.add(config.getProcedure());

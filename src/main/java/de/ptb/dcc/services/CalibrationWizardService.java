@@ -8,6 +8,9 @@ import de.ptb.dcc.entities.Sensor;
 import de.ptb.dcc.repositories.CalibrationRepository;
 import de.ptb.dcc.repositories.CalibrationRequestRepository;
 import de.ptb.dcc.repositories.SensorRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
@@ -25,6 +28,8 @@ public class CalibrationWizardService {
     private static final Logger log = LoggerFactory.getLogger(CalibrationWizardService.class);
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
+    private final ObjectMapper objectMapper;
+
     private final CalibrationRepository calibrationRepo;
     private final CalibrationRequestRepository requestRepo;
     private final SensorRepository sensorRepo;
@@ -35,12 +40,14 @@ public class CalibrationWizardService {
                                      CalibrationRequestRepository requestRepo,
                                      SensorRepository sensorRepo,
                                      PythonBridgeService pythonBridge,
-                                     CalibrationWizardInserter inserter) {
+                                     CalibrationWizardInserter inserter,
+                                     ObjectMapper objectMapper) {
         this.calibrationRepo = calibrationRepo;
         this.requestRepo = requestRepo;
         this.sensorRepo = sensorRepo;
         this.pythonBridge = pythonBridge;
         this.inserter = inserter;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -59,7 +66,19 @@ public class CalibrationWizardService {
                 : null;
 
         CalibrationDto dto = calibrationRepo.findByCalibrationRequestId(calibrationRequestId)
-                .map(this::toDto)
+                .map(c -> {
+                    CalibrationDto d = toDto(c);
+                    // Patch jobJson sensor_method_template with current sensor data
+                    if (sensorId != null && d.getJobJson() != null && !d.getJobJson().isBlank()) {
+                        String updatedJobJson = patchSensorTemplate(d.getJobJson(), sensorId, modelName);
+                        if (!updatedJobJson.equals(d.getJobJson())) {
+                            c.setJobJson(updatedJobJson);
+                            calibrationRepo.save(c);
+                            d.setJobJson(updatedJobJson);
+                        }
+                    }
+                    return d;
+                })
                 .orElseGet(() -> {
                     Calibration calib = new Calibration();
                     calib.setCalibrationRequestId(calibrationRequestId);
@@ -219,6 +238,41 @@ public class CalibrationWizardService {
     private void assertNotBlank(String value, String fieldName) {
         if (value == null || value.isBlank())
             throw new IllegalStateException("Campo mancante per il build: " + fieldName);
+    }
+
+    /**
+     * Patches the sensor_method_template in a jobJson string with the current
+     * sensor data. Only updates model or serial_number if they are blank.
+     */
+    private String patchSensorTemplate(String jobJson, Long sensorId, String modelName) {
+        try {
+            JsonNode root = objectMapper.readTree(jobJson);
+            ObjectNode template = root.has("sensor_method_template")
+                    && root.get("sensor_method_template").isObject()
+                    ? (ObjectNode) root.get("sensor_method_template")
+                    : null;
+
+            if (template == null) return jobJson;
+
+            boolean changed = false;
+
+            if (modelName != null && !modelName.isBlank()
+                    && (template.get("model") == null || template.get("model").asText().isBlank())) {
+                template.put("model", modelName);
+                changed = true;
+            }
+
+            if (sensorId != null
+                    && (template.get("serial_number") == null || template.get("serial_number").asText().isBlank())) {
+                template.put("serial_number", sensorId.toString());
+                changed = true;
+            }
+
+            return changed ? objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root) : jobJson;
+        } catch (Exception e) {
+            log.warn("[Wizard] Failed to patch sensor_method_template in jobJson: {}", e.getMessage());
+            return jobJson;
+        }
     }
 
     public CalibrationRepository calibrationRepo() { return calibrationRepo; }

@@ -4,11 +4,16 @@ import de.ptb.dcc.dtos.CalibrationMessageDto;
 import de.ptb.dcc.dtos.CalibrationRequestDto;
 import de.ptb.dcc.entities.CalibrationMessage;
 import de.ptb.dcc.entities.CalibrationRequest;
+import de.ptb.dcc.entities.Calibration;
 import de.ptb.dcc.repositories.CalibrationMessageRepository;
+import de.ptb.dcc.repositories.CalibrationRepository;
 import de.ptb.dcc.repositories.CalibrationRequestRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,13 +25,18 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/calibrations")
 public class CalibrationController {
 
+    private static final Logger log = LoggerFactory.getLogger(CalibrationController.class);
+
     private final CalibrationRequestRepository reqRepo;
     private final CalibrationMessageRepository msgRepo;
+    private final CalibrationRepository calibrationRepo;
 
     public CalibrationController(CalibrationRequestRepository reqRepo,
-                                  CalibrationMessageRepository msgRepo) {
+                                  CalibrationMessageRepository msgRepo,
+                                  CalibrationRepository calibrationRepo) {
         this.reqRepo = reqRepo;
         this.msgRepo = msgRepo;
+        this.calibrationRepo = calibrationRepo;
     }
 
     // ── Calibration Requests ──────────────────────────────────────────────────
@@ -70,6 +80,37 @@ public class CalibrationController {
         return reqRepo.findById(id)
                 .map(r -> ResponseEntity.ok(toRequestDtoFull(r)))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * DELETE /api/calibrations/requests/{requestId}
+     * Deletes the CalibrationRequest, its associated Calibration (wizard + run data),
+     * and all related CalibrationMessages.
+     */
+    @DeleteMapping("/requests/{requestId}")
+    public ResponseEntity<?> deleteRequest(@PathVariable Long requestId) {
+        try {
+            CalibrationRequest req = reqRepo.findById(requestId)
+                    .orElseThrow(() -> new RuntimeException("CalibrationRequest not found: " + requestId));
+
+            calibrationRepo.findByCalibrationRequestId(requestId).ifPresent(calib -> {
+                if (calib.getRunId() != null) {
+                    msgRepo.findByCalibIdOrderByStepIndexAsc(calib.getRunId())
+                            .forEach(msgRepo::delete);
+                }
+                calibrationRepo.delete(calib);
+                log.info("[Calibration] Deleted Calibration id={} for requestId={}", calib.getId(), requestId);
+            });
+
+            reqRepo.delete(req);
+            log.info("[Calibration] Deleted CalibrationRequest id={} (calibrationId={})", requestId, req.getCalibrationId());
+            return ResponseEntity.noContent().build();
+
+        } catch (RuntimeException e) {
+            log.error("[Calibration] deleteRequest failed for requestId={}: {}", requestId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("{\"error\": \"" + e.getMessage().replace("\"", "'") + "\"}");
+        }
     }
 
     // ── Calibration Messages ──────────────────────────────────────────────────
