@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python-is-python3 python3-pip python3-venv \
     && pip3 install --no-cache-dir --upgrade pip \
     && pip3 install --no-cache-dir --break-system-packages \
-       numpy scipy reportlab matplotlib \
+       numpy scipy reportlab matplotlib pint \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
