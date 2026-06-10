@@ -338,12 +338,13 @@ public class DccController {
             log.info("[DccController] verifyConformity exit={}", exitCode);
 
             // 7. Determine overall verdict from log
-            // Note: check "NON-CONFORMING" before "CONFORMING" since the latter is a substring of the former
             String overall = "ERROR";
             if (exitCode == 0) {
-                if (output.contains("OVERALL VERDICT: NON-CONFORMING")) {
+                if (output.contains("OVERALL VERDICT: NON-CONFORMING")
+                        || output.contains("OVERALL VERDICT: NON CONFORME")) {
                     overall = "NON-CONFORMING";
-                } else if (output.contains("OVERALL VERDICT: CONFORMING")) {
+                } else if (output.contains("OVERALL VERDICT: CONFORMING")
+                        || output.contains("OVERALL VERDICT: CONFORME")) {
                     overall = "CONFORMING";
                 } else {
                     overall = "UNKNOWN";
