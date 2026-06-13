@@ -165,6 +165,8 @@ public class PythonBridgeService {
      * @param oldB        previous coefficient B from DB
      * @param oldC        previous coefficient C from DB (cubic a2 or cube-log C3)
      * @param oldD        previous coefficient D from DB (cubic a3)
+     * @param lastCalibrationPath  absolute path for last_calibration.json output
+     * @param ufit        fitting uncertainty from previous calibration rmse_pre (null = use sensor JSON)
      */
     public CalibrationRunResult runCalibration(
             String scriptPath,
@@ -181,7 +183,9 @@ public class PythonBridgeService {
             Double oldA,
             Double oldB,
             Double oldC,
-            Double oldD
+            Double oldD,
+            String lastCalibrationPath,
+            Double ufit
     ) throws IOException, InterruptedException {
 
         List<String> cmd = new ArrayList<>();
@@ -209,6 +213,15 @@ public class PythonBridgeService {
         if (oldB != null) { cmd.add("--old-b"); cmd.add(String.valueOf(oldB)); }
         if (isCubic && oldC != null) { cmd.add("--old-c"); cmd.add(String.valueOf(oldC)); }
         if (isCubic && oldD != null) { cmd.add("--old-d"); cmd.add(String.valueOf(oldD)); }
+
+        // R18: last-calibration JSON output for downstream / next calibration
+        if (lastCalibrationPath != null) {
+            cmd.add("--last-calibration"); cmd.add(lastCalibrationPath);
+        }
+        // R19: ufit from previous calibration rmse_pre overrides sensor JSON
+        if (ufit != null) {
+            cmd.add("--ufit"); cmd.add(String.valueOf(ufit));
+        }
 
         if (config.getProcedure() != null && !config.getProcedure().isBlank()) {
             cmd.add("--procedure"); cmd.add(config.getProcedure());

@@ -99,6 +99,10 @@ public class Calibration {
     @Column(name = "dcc_xml", columnDefinition = "TEXT")
     private String dccXml;
 
+    /** Comprehensive calibration result JSON for downstream consumers and next calibration */
+    @Column(name = "last_calibration_json", columnDefinition = "TEXT")
+    private String lastCalibrationJson;
+
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
@@ -183,4 +187,7 @@ public class Calibration {
 
     public String getDccXml() { return dccXml; }
     public void setDccXml(String dccXml) { this.dccXml = dccXml; }
+
+    public String getLastCalibrationJson() { return lastCalibrationJson; }
+    public void setLastCalibrationJson(String lastCalibrationJson) { this.lastCalibrationJson = lastCalibrationJson; }
 }

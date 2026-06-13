@@ -149,6 +149,28 @@ public class CalibrationRunService {
         log.info("[CalibRunService] resolved sensor.id={}, coeffs from DB: A={} B={} C={} D={}",
                 sensor != null ? sensor.getId() : null, oldA, oldB, oldC, oldD);
 
+        // R18/R19: look up previous successful calibration for this sensor to feed rmse_pre as --ufit
+        Double ufit = null;
+        if (calib.getMuId() != null) {
+            var prevCalib = calibrationRepo.findTopByMuIdAndRunStatusAndIdNotOrderByCreatedAtDesc(
+                    calib.getMuId(), "SUCCESS", calib.getId());
+            if (prevCalib.isPresent()) {
+                String prevJson = prevCalib.get().getLastCalibrationJson();
+                if (prevJson != null && !prevJson.isBlank()) {
+                    try {
+                        var mapper = new ObjectMapper();
+                        var node = mapper.readTree(prevJson);
+                        if (node.has("fit_quality") && node.get("fit_quality").has("rmse_pre")) {
+                            ufit = node.get("fit_quality").get("rmse_pre").asDouble();
+                            log.info("[CalibRunService] Previous calibration rmse_pre={} → will pass as --ufit", ufit);
+                        }
+                    } catch (Exception e) {
+                        log.warn("[CalibRunService] Could not parse previous calibration JSON: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+
         String runId = deriveRunId(calib);
         Path runsBase   = resolveRunsDir();
         Path runDir     = runsBase.resolve(runId);
@@ -181,6 +203,7 @@ public class CalibrationRunService {
             Path pdfOutputPath      = outputDir.resolve("ntc_cert_funzione.pdf");
             Path xmlOutputPath      = outputDir.resolve("ntc_calibration_certificate.xml");
             Path conformityPath     = outputDir.resolve("conformity.json");
+            Path lastCalibPath      = outputDir.resolve("last_calibration.json");
 
             // 4. Mark as RUNNING
             calib.setRunId(runId);
@@ -200,7 +223,9 @@ public class CalibrationRunService {
                     conformityPath.toString(),
                     imagesDir.toString(),
                     config,
-                    oldA, oldB, oldC, oldD
+                    oldA, oldB, oldC, oldD,
+                    lastCalibPath.toString(),
+                    ufit
             );
 
             // 5a. Recursively upload all generated files under output/ and images/ to S3
@@ -223,6 +248,7 @@ public class CalibrationRunService {
             String resultJson     = readIfExists(certOutputPath);
             String conformityJson = readIfExists(conformityPath);
             String dccXml         = readIfExists(xmlOutputPath);
+            String lastCalibJson  = readIfExists(lastCalibPath);
             List<String> fileUrls = collectFileUrls(runId, runDir, s3Available);
             String imagesJson = new ObjectMapper().writeValueAsString(fileUrls);
 
@@ -242,6 +268,7 @@ public class CalibrationRunService {
             calib.setDccXml(dccXml);
             calib.setImages(imagesJson);
             calib.setPdfOutputUrl(pdfUrl);
+            calib.setLastCalibrationJson(lastCalibJson);
             calibrationRepo.save(calib);
 
             // 8. On success: extract new coefficients from resultJson and persist to Sensor

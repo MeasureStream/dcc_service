@@ -12,4 +12,8 @@ public interface CalibrationRepository extends JpaRepository<Calibration, Long> 
     List<Calibration> findByMuId(Long muId);
     List<Calibration> findByProcessed(boolean processed);
     java.util.Optional<Calibration> findByCalibrationRequestId(Long calibrationRequestId);
+
+    /** Latest successful calibration for the same sensor (mu_id), excluding the current one. */
+    java.util.Optional<Calibration> findTopByMuIdAndRunStatusAndIdNotOrderByCreatedAtDesc(
+            Long muId, String runStatus, Long excludeId);
 }
