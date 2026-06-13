@@ -8,6 +8,7 @@ import de.ptb.dcc.entities.User;
 import de.ptb.dcc.repositories.CalibrationRepository;
 import de.ptb.dcc.services.CalibrationRunService;
 import de.ptb.dcc.services.DccService;
+import de.ptb.dcc.services.S3Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,9 @@ public class DccController {
     private final DccService dccService;
     private final CalibrationRunService calibrationRunService;
     private final CalibrationRepository calibrationRepository;
+    private final S3Service s3Service;
+
+    private static final String S3_KEY_PREFIX = "calibration-runs/";
 
     @Value("${python.cmd:python}")
     private String pythonCmd;
@@ -50,10 +54,11 @@ public class DccController {
     private String calibrationRunsPath;
 
     public DccController(DccService dccService, CalibrationRunService calibrationRunService,
-                         CalibrationRepository calibrationRepository) {
+                         CalibrationRepository calibrationRepository, S3Service s3Service) {
         this.dccService = dccService;
         this.calibrationRunService = calibrationRunService;
         this.calibrationRepository = calibrationRepository;
+        this.s3Service = s3Service;
     }
 
     // -------------------------------------------------------------------------
@@ -204,16 +209,46 @@ public class DccController {
                 return ResponseEntity.notFound().build();
             }
 
-            Path runsBase = Path.of(calibrationRunsPath).toAbsolutePath().normalize();
-            Path pdfPath = runsBase.resolve(calib.getRunId()).resolve("output").resolve("ntc_cert_funzione.pdf");
+            String runId = calib.getRunId();
+            String s3Prefix = S3_KEY_PREFIX + runId + "/output/";
+            byte[] content = null;
+            String filename = "calibration-result-dcc-" + dccId + ".pdf";
 
-            if (!Files.exists(pdfPath)) {
+            // Try S3 first: list keys under the run's output prefix, find any PDF
+            if (s3Service != null && s3Service.isAvailable()) {
+                List<String> keys = s3Service.listKeys(s3Prefix);
+                for (String key : keys) {
+                    if (key.endsWith(".pdf")) {
+                        content = s3Service.downloadFile(key);
+                        filename = key.substring(key.lastIndexOf('/') + 1);
+                        break;
+                    }
+                }
+            }
+
+            // Fallback to local filesystem: scan output dir for any PDF
+            if (content == null) {
+                Path outputDir = Path.of(calibrationRunsPath).toAbsolutePath().normalize()
+                        .resolve(runId).resolve("output");
+                if (Files.isDirectory(outputDir)) {
+                    try (var stream = Files.walk(outputDir)) {
+                        Path pdfPath = stream.filter(Files::isRegularFile)
+                                .filter(p -> p.getFileName().toString().endsWith(".pdf"))
+                                .findFirst().orElse(null);
+                        if (pdfPath != null) {
+                            content = Files.readAllBytes(pdfPath);
+                            filename = pdfPath.getFileName().toString();
+                        }
+                    }
+                }
+            }
+
+            if (content == null) {
                 return ResponseEntity.notFound().build();
             }
 
-            byte[] content = Files.readAllBytes(pdfPath);
             return ResponseEntity.ok()
-                    .header("Content-Disposition", "attachment; filename=\"calibration-result-dcc-" + dccId + ".pdf\"")
+                    .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
                     .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
                     .body(content);
         } catch (Exception e) {

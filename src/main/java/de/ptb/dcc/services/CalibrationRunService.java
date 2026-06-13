@@ -19,7 +19,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -37,12 +40,8 @@ public class CalibrationRunService {
     private static final Logger log = LoggerFactory.getLogger(CalibrationRunService.class);
 
     private static final String STATIC_BASE = "/api/calibrations/static/runs/";
-    private static final String OUTPUT_CERT  = "certificato_funzione_filled.json";
-    private static final String OUTPUT_PDF   = "ntc_cert_funzione.pdf";
-    private static final String OUTPUT_XML   = "ntc_calibration_certificate.xml";
-    private static final String OUTPUT_CONF  = "conformity.json";
-    private static final String INPUT_EXPORT = "export.json";
-    private static final String INPUT_CERT   = "certificato_in.json";
+    private static final String S3_BASE     = "/api/calibrations/s3/runs/";
+    private static final String S3_KEY_PREFIX = "calibration-runs/";
 
     @Value("${calibration.script.path:}")
     private String calibrationScriptPath;
@@ -59,19 +58,22 @@ public class CalibrationRunService {
     private final PythonBridgeService pythonBridge;
     private final CalibrationWizardService wizardService;
     private final SensorCoefficientUpdater sensorCoeffUpdater;
+    private final S3Service s3Service;
 
     public CalibrationRunService(CalibrationRepository calibrationRepo,
                                   CalibrationRequestRepository requestRepo,
                                   SensorRepository sensorRepo,
                                   PythonBridgeService pythonBridge,
                                   CalibrationWizardService wizardService,
-                                  SensorCoefficientUpdater sensorCoeffUpdater) {
+                                  SensorCoefficientUpdater sensorCoeffUpdater,
+                                  S3Service s3Service) {
         this.calibrationRepo = calibrationRepo;
         this.requestRepo = requestRepo;
         this.sensorRepo = sensorRepo;
         this.pythonBridge = pythonBridge;
         this.wizardService = wizardService;
         this.sensorCoeffUpdater = sensorCoeffUpdater;
+        this.s3Service = s3Service;
     }
 
     // ── Public API ─────────────────────────────────────────────────────────
@@ -159,14 +161,12 @@ public class CalibrationRunService {
             Files.createDirectories(inputDir);
             Files.createDirectories(outputDir);
             Files.createDirectories(imagesDir);
-            Files.createDirectories(imagesDir.resolve("calibration"));
-            Files.createDirectories(imagesDir.resolve("conformity"));
 
             // 2. Write input files
-            Path inputJsonPath = inputDir.resolve(INPUT_EXPORT);
+            Path inputJsonPath = inputDir.resolve("export.json");
             Files.writeString(inputJsonPath, req.getProcessedJson(), StandardCharsets.UTF_8);
 
-            Path certInputPath = inputDir.resolve(INPUT_CERT);
+            Path certInputPath = inputDir.resolve("certificato_in.json");
             Files.writeString(certInputPath, calib.getCertificatoIn(), StandardCharsets.UTF_8);
 
             // 3. Resolve script and model paths
@@ -177,10 +177,10 @@ public class CalibrationRunService {
             Path refPath      = modelsDir.resolve("references").resolve(
                     config.getRefJson() != null ? config.getRefJson() : "fluke_9142.json");
 
-            Path certOutputPath     = outputDir.resolve(OUTPUT_CERT);
-            Path pdfOutputPath      = outputDir.resolve(OUTPUT_PDF);
-            Path xmlOutputPath      = outputDir.resolve(OUTPUT_XML);
-            Path conformityPath     = outputDir.resolve(OUTPUT_CONF);
+            Path certOutputPath     = outputDir.resolve("certificato_funzione_filled.json");
+            Path pdfOutputPath      = outputDir.resolve("ntc_cert_funzione.pdf");
+            Path xmlOutputPath      = outputDir.resolve("ntc_calibration_certificate.xml");
+            Path conformityPath     = outputDir.resolve("conformity.json");
 
             // 4. Mark as RUNNING
             calib.setRunId(runId);
@@ -203,16 +203,36 @@ public class CalibrationRunService {
                     oldA, oldB, oldC, oldD
             );
 
-            // 6. Collect output file contents and image URLs
+            // 5a. Recursively upload all generated files under output/ and images/ to S3
+            boolean s3Available = false;
+            if (s3Service.isAvailable()) {
+                try {
+                    String s3Prefix = S3_KEY_PREFIX + runId + "/";
+                    uploadDirectoryToS3(outputDir, s3Prefix + "output");
+                    uploadDirectoryToS3(imagesDir, s3Prefix + "images");
+                    s3Available = true;
+                    log.info("[CalibRunService] S3 upload completed for run {}", runId);
+                } catch (Exception e) {
+                    log.warn("[CalibRunService] S3 upload failed, falling back to local: {}", e.getMessage());
+                }
+            } else {
+                log.warn("[CalibRunService] S3 not available, files only stored locally");
+            }
+
+            // 6. Collect output file contents and file URLs (recursive, any name)
             String resultJson     = readIfExists(certOutputPath);
             String conformityJson = readIfExists(conformityPath);
             String dccXml         = readIfExists(xmlOutputPath);
-            List<String> imagePaths = collectImageUrls(runId, imagesDir);
-            String imagesJson = new ObjectMapper().writeValueAsString(imagePaths);
+            List<String> fileUrls = collectFileUrls(runId, runDir, s3Available);
+            String imagesJson = new ObjectMapper().writeValueAsString(fileUrls);
 
-            String pdfUrl = Files.exists(pdfOutputPath)
-                    ? STATIC_BASE + runId + "/output/" + OUTPUT_PDF
-                    : null;
+            String pdfUrl = null;
+            if (s3Available) {
+                pdfUrl = findFirstPdfUrl(runId, outputDir, true);
+            }
+            if (pdfUrl == null) {
+                pdfUrl = findFirstPdfUrl(runId, outputDir, false);
+            }
 
             // 7. Persist calibration results
             calib.setRunLog(result.log());
@@ -327,21 +347,63 @@ public class CalibrationRunService {
     }
 
     /**
-     * Scans images/calibration/ and images/conformity/ for .png files
-     * and returns their URL paths relative to the static endpoint.
+     * Recursively scans output/ and images/ directories under runDir
+     * and returns URL paths for all files. Uses S3 URLs when available,
+     * local static URLs as fallback. Skips the input/ directory.
      */
-    private List<String> collectImageUrls(String runId, Path imagesDir) {
+    private List<String> collectFileUrls(String runId, Path runDir, boolean s3Available) {
         List<String> urls = new ArrayList<>();
-        for (String sub : List.of("calibration", "conformity")) {
-            Path subDir = imagesDir.resolve(sub);
-            if (!Files.isDirectory(subDir)) continue;
-            try (Stream<Path> s = Files.list(subDir)) {
-                s.filter(p -> p.toString().endsWith(".png"))
-                 .map(p -> STATIC_BASE + runId + "/images/" + sub + "/" + p.getFileName())
-                 .sorted()
-                 .forEach(urls::add);
+        String base = s3Available ? S3_BASE : STATIC_BASE;
+        for (String root : List.of("output", "images")) {
+            Path rootDir = runDir.resolve(root);
+            if (!Files.isDirectory(rootDir)) continue;
+            try (Stream<Path> stream = Files.walk(rootDir)) {
+                stream.filter(Files::isRegularFile)
+                      .map(p -> base + runId + "/" + runDir.relativize(p).toString().replace('\\', '/'))
+                      .sorted()
+                      .forEach(urls::add);
             } catch (IOException ignored) {}
         }
         return urls;
+    }
+
+    /** Recursively uploads all files under localDir to S3 under the given s3Prefix. */
+    private void uploadDirectoryToS3(Path localDir, String s3Prefix) throws IOException {
+        if (!Files.isDirectory(localDir)) return;
+        try (Stream<Path> stream = Files.walk(localDir)) {
+            stream.filter(Files::isRegularFile).forEach(p -> {
+                String relPath = localDir.relativize(p).toString().replace('\\', '/');
+                String s3Key = s3Prefix + "/" + relPath;
+                String contentType = detectContentType(p.getFileName().toString());
+                s3Service.uploadPath(s3Key, p, contentType);
+            });
+        }
+    }
+
+    /** Finds the first .pdf file under outputDir and returns its S3 or static URL. */
+    private String findFirstPdfUrl(String runId, Path outputDir, boolean s3) {
+        if (!Files.isDirectory(outputDir)) return null;
+        try (Stream<Path> stream = Files.walk(outputDir)) {
+            return stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".pdf"))
+                    .findFirst()
+                    .map(p -> {
+                        String base = s3 ? S3_BASE : STATIC_BASE;
+                        String rel = outputDir.getParent().relativize(p).toString().replace('\\', '/');
+                        return base + runId + "/" + rel;
+                    })
+                    .orElse(null);
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private String detectContentType(String filename) {
+        if (filename.endsWith(".png"))  return "image/png";
+        if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) return "image/jpeg";
+        if (filename.endsWith(".pdf"))  return "application/pdf";
+        if (filename.endsWith(".xml"))  return "application/xml";
+        if (filename.endsWith(".json")) return "application/json";
+        return "application/octet-stream";
     }
 }

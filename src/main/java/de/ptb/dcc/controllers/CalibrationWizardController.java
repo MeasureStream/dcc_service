@@ -11,6 +11,7 @@ import de.ptb.dcc.repositories.CalibrationRequestRepository;
 import de.ptb.dcc.services.CalibrationRunService;
 import de.ptb.dcc.services.CalibrationWizardService;
 import de.ptb.dcc.services.DccService;
+import de.ptb.dcc.services.S3Service;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,6 +63,9 @@ public class CalibrationWizardController {
     private final CalibrationRunService runService;
     private final DccService dccService;
     private final CalibrationRequestRepository calibrationRequestRepository;
+    private final S3Service s3Service;
+
+    private static final String S3_KEY_PREFIX = "calibration-runs/";
 
     @Value("${calibration.runs.path:./calibration-runs}")
     private String calibrationRunsPath;
@@ -71,11 +76,13 @@ public class CalibrationWizardController {
     public CalibrationWizardController(CalibrationWizardService wizardService,
                                         CalibrationRunService runService,
                                         DccService dccService,
-                                        CalibrationRequestRepository calibrationRequestRepository) {
+                                        CalibrationRequestRepository calibrationRequestRepository,
+                                        S3Service s3Service) {
         this.wizardService = wizardService;
         this.runService = runService;
         this.dccService = dccService;
         this.calibrationRequestRepository = calibrationRequestRepository;
+        this.s3Service = s3Service;
     }
 
     /** Inizializza o ricarica il wizard per una CalibrationRequest */
@@ -281,22 +288,45 @@ public class CalibrationWizardController {
     }
 
     /**
-     * GET /api/calibrations/static/runs/**
-     * Serves static files from the calibration-runs directory (images, PDFs, XMLs).
-     * Path format: /api/calibrations/static/runs/{runId}/{subpath}
+     * GET /api/calibrations/s3/runs/**
+     * Serves calibration run files from S3, with local filesystem fallback.
+     * Path format: /api/calibrations/s3/runs/{runId}/{subpath}
      */
-    @GetMapping("/static/runs/**")
-    public ResponseEntity<Resource> serveStaticFile(HttpServletRequest request) {
+    @GetMapping("/s3/runs/**")
+    public ResponseEntity<byte[]> serveS3File(HttpServletRequest request) {
         String requestUri = request.getRequestURI();
-        // Extract everything after /static/runs/
-        int idx = requestUri.indexOf("/static/runs/");
+        int idx = requestUri.indexOf("/s3/runs/");
         if (idx < 0) return ResponseEntity.notFound().build();
-        String relativePath = requestUri.substring(idx + "/static/runs/".length());
+        String relativePath = requestUri.substring(idx + "/s3/runs/".length());
 
+        String s3Key = S3_KEY_PREFIX + relativePath.replace('\\', '/');
+
+        // Try S3 first
+        if (s3Service != null && s3Service.isAvailable()) {
+            try {
+                byte[] content = s3Service.downloadFile(s3Key);
+                if (content != null && content.length > 0) {
+                    MediaType mediaType = detectMediaType(extractFilename(relativePath));
+                    String filename = extractFilename(relativePath);
+                    org.springframework.http.ContentDisposition disposition =
+                            org.springframework.http.ContentDisposition.inline()
+                                    .filename(filename, java.nio.charset.StandardCharsets.UTF_8)
+                                    .build();
+
+                    return ResponseEntity.ok()
+                            .contentType(mediaType)
+                            .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                            .body(content);
+                }
+            } catch (Exception e) {
+                log.warn("[CalibrationWizard] S3 download failed for key={}, falling back to local: {}", s3Key, e.getMessage());
+            }
+        }
+
+        // Fallback to local filesystem
         Path runsBase = Path.of(calibrationRunsPath).toAbsolutePath().normalize();
         Path filePath = runsBase.resolve(relativePath).normalize();
 
-        // Security: ensure the resolved path is within runs base
         if (!filePath.startsWith(runsBase)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
@@ -305,23 +335,23 @@ public class CalibrationWizardController {
             return ResponseEntity.notFound().build();
         }
 
-        Resource resource = new FileSystemResource(filePath);
-        MediaType mediaType = detectMediaType(filePath.getFileName().toString());
-        String filename = filePath.getFileName().toString();
+        try {
+            byte[] content = Files.readAllBytes(filePath);
+            MediaType mediaType = detectMediaType(filePath.getFileName().toString());
+            String filename = filePath.getFileName().toString();
+            org.springframework.http.ContentDisposition disposition =
+                    org.springframework.http.ContentDisposition.inline()
+                            .filename(filename, java.nio.charset.StandardCharsets.UTF_8)
+                            .build();
 
-        // Set Content-Disposition with the real filename so the browser
-        // shows the correct name in the download dialog / PDF viewer tab.
-        // Use "inline" so PDFs and images open in the browser tab rather than
-        // triggering a forced download.
-        org.springframework.http.ContentDisposition disposition =
-                org.springframework.http.ContentDisposition.inline()
-                        .filename(filename, java.nio.charset.StandardCharsets.UTF_8)
-                        .build();
-
-        return ResponseEntity.ok()
-                .contentType(mediaType)
-                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-                .body(resource);
+            return ResponseEntity.ok()
+                    .contentType(mediaType)
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                    .body(content);
+        } catch (IOException e) {
+            log.error("[CalibrationWizard] Local file read failed: {}", filePath, e);
+            return ResponseEntity.notFound().build();
+        }
     }
 
     private MediaType detectMediaType(String filename) {
@@ -331,6 +361,11 @@ public class CalibrationWizardController {
         if (filename.endsWith(".xml"))  return MediaType.APPLICATION_XML;
         if (filename.endsWith(".json")) return MediaType.APPLICATION_JSON;
         return MediaType.APPLICATION_OCTET_STREAM;
+    }
+
+    private String extractFilename(String path) {
+        int lastSlash = path.lastIndexOf('/');
+        return lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
     }
 
     /**

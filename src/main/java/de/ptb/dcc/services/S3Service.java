@@ -10,13 +10,15 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.core.ResponseBytes;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
 
 import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.net.URI;
-import java.time.Duration;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class S3Service {
@@ -108,6 +110,66 @@ public class S3Service {
                         + "' is not reachable from this container.");
             }
             return null;
+        }
+    }
+
+    public String uploadBytes(String key, byte[] data, String contentType) {
+        if (s3Client == null) {
+            System.err.println("[ERROR] S3Client not initialized. Cannot upload " + key);
+            return null;
+        }
+        try {
+            System.out.println(
+                    "[INFO] Uploading bytes to S3: " + key + " (Bucket: " + bucket + ", Endpoint: " + endpoint + ")");
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .contentType(contentType)
+                    .acl(ObjectCannedACL.PUBLIC_READ)
+                    .build();
+
+            s3Client.putObject(putObjectRequest, RequestBody.fromBytes(data));
+
+            String publicUrl = publicUrlBase + "/" + key;
+            System.out.println("[SUCCESS] Uploaded " + key + " to S3. Public URL: " + publicUrl);
+            return publicUrl;
+        } catch (Exception e) {
+            System.err.println("[ERROR] S3 Upload failed for " + key + "!");
+            System.err.println("  - Error Message: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public String uploadPath(String key, Path path, String contentType) {
+        if (s3Client == null) {
+            System.err.println("[ERROR] S3Client not initialized. Cannot upload " + key);
+            return null;
+        }
+        try {
+            return uploadBytes(key, Files.readAllBytes(path), contentType);
+        } catch (Exception e) {
+            System.err.println("[ERROR] S3 Upload failed for " + key + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    public boolean isAvailable() {
+        return s3Client != null;
+    }
+
+    public List<String> listKeys(String prefix) {
+        if (s3Client == null) return List.of();
+        try {
+            ListObjectsRequest req = ListObjectsRequest.builder()
+                    .bucket(bucket)
+                    .prefix(prefix)
+                    .build();
+            return s3Client.listObjects(req).contents().stream()
+                    .map(S3Object::key)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            System.err.println("[ERROR] S3 listKeys failed for prefix " + prefix + ": " + e.getMessage());
+            return List.of();
         }
     }
 
