@@ -9,7 +9,6 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import de.ptb.dcc.dtos.DccValidationResultDto;
-import org.springframework.core.io.ClassPathResource;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.Transformer;
@@ -17,6 +16,9 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.*;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -32,28 +34,37 @@ public class SigningUtils {
 
     private static final String XADES_NS = "http://uri.etsi.org/01903/v1.3.2#";
 
+    private static final String KEYS_BASE_PATH;
+
     static {
+        String envPath = System.getenv("KEYS_PATH");
+        KEYS_BASE_PATH = (envPath != null && !envPath.isEmpty()) ? envPath : "keys";
+
         Init.init();
         if (Security.getProvider("BC") == null) {
             Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
         }
     }
 
+    private static Path resolveKeyPath(String filename) {
+        return Paths.get(KEYS_BASE_PATH, filename);
+    }
+
     public static PrivateKey loadPrivateKey() throws Exception {
-        try (InputStream is = new ClassPathResource("keys/private_key.pem").getInputStream()) {
-            String key = new String(is.readAllBytes())
-                    .replace("-----BEGIN PRIVATE KEY-----", "")
-                    .replace("-----END PRIVATE KEY-----", "")
-                    .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                    .replace("-----END RSA PRIVATE KEY-----", "")
-                    .replaceAll("\\s", "");
-            return KeyFactory.getInstance("RSA")
-                    .generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(key)));
-        }
+        Path keyPath = resolveKeyPath("private_key.pem");
+        String key = new String(Files.readAllBytes(keyPath))
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replace("-----BEGIN RSA PRIVATE KEY-----", "")
+                .replace("-----END RSA PRIVATE KEY-----", "")
+                .replaceAll("\\s", "");
+        return KeyFactory.getInstance("RSA")
+                .generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(key)));
     }
 
     public static X509Certificate loadCertificate() throws Exception {
-        try (InputStream is = new ClassPathResource("keys/certificate.pem").getInputStream()) {
+        Path keyPath = resolveKeyPath("certificate.pem");
+        try (InputStream is = Files.newInputStream(keyPath)) {
             CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
             return (X509Certificate) certFactory.generateCertificate(is);
         }
