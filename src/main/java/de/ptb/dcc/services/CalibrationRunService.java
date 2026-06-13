@@ -149,7 +149,7 @@ public class CalibrationRunService {
         log.info("[CalibRunService] resolved sensor.id={}, coeffs from DB: A={} B={} C={} D={}",
                 sensor != null ? sensor.getId() : null, oldA, oldB, oldC, oldD);
 
-        // R18/R19: look up previous successful calibration for this sensor to feed rmse_pre as --ufit
+        // R18/R19: look up previous successful calibration for this sensor to feed rmse_pre as ufit
         Double ufit = null;
         if (calib.getMuId() != null) {
             var prevCalib = calibrationRepo.findTopByMuIdAndRunStatusAndIdNotOrderByCreatedAtDesc(
@@ -162,7 +162,7 @@ public class CalibrationRunService {
                         var node = mapper.readTree(prevJson);
                         if (node.has("fit_quality") && node.get("fit_quality").has("rmse_pre")) {
                             ufit = node.get("fit_quality").get("rmse_pre").asDouble();
-                            log.info("[CalibRunService] Previous calibration rmse_pre={} → will pass as --ufit", ufit);
+                            log.info("[CalibRunService] Previous calibration rmse_pre={} → will inject as ufit in sensor JSON", ufit);
                         }
                     } catch (Exception e) {
                         log.warn("[CalibRunService] Could not parse previous calibration JSON: {}", e.getMessage());
@@ -199,6 +199,41 @@ public class CalibrationRunService {
             Path refPath      = modelsDir.resolve("references").resolve(
                     config.getRefJson() != null ? config.getRefJson() : "fluke_9142.json");
 
+            // R18/R19: inject rmse_pre from previous calibration as ufit into sensor JSON
+            if (ufit != null && Files.exists(sensorPath)) {
+                try {
+                    var mapper = new ObjectMapper();
+                    var sensorNode = mapper.readTree(sensorPath.toFile());
+                    var ruArray = sensorNode.at("/metrology/readingUncertainty");
+                    if (ruArray.isArray()) {
+                        // Inject or update ufit entry
+                        boolean found = false;
+                        for (var item : ruArray) {
+                            if ("ufit".equals(item.get("varName").asText())) {
+                                ((com.fasterxml.jackson.databind.node.ObjectNode) item).put("value", ufit);
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            var ufitEntry = mapper.createObjectNode();
+                            ufitEntry.put("varName", "ufit");
+                            ufitEntry.put("value", ufit);
+                            ufitEntry.put("coverageFactor", 2.0);
+                            ufitEntry.put("PDF", "normal");
+                            ufitEntry.put("description", "Injected from previous calibration rmse_pre");
+                            ((com.fasterxml.jackson.databind.node.ArrayNode) ruArray).add(ufitEntry);
+                        }
+                        Path patchedSensorPath = inputDir.resolve("sensor_patched.json");
+                        mapper.writerWithDefaultPrettyPrinter().writeValue(patchedSensorPath.toFile(), sensorNode);
+                        sensorPath = patchedSensorPath;
+                        log.info("[CalibRunService] Patched sensor JSON with ufit={} → {}", ufit, patchedSensorPath);
+                    }
+                } catch (Exception e) {
+                    log.warn("[CalibRunService] Could not patch sensor JSON with ufit: {}", e.getMessage());
+                }
+            }
+
             Path certOutputPath     = outputDir.resolve("certificato_funzione_filled.json");
             Path pdfOutputPath      = outputDir.resolve("ntc_cert_funzione.pdf");
             Path xmlOutputPath      = outputDir.resolve("ntc_calibration_certificate.xml");
@@ -224,8 +259,7 @@ public class CalibrationRunService {
                     imagesDir.toString(),
                     config,
                     oldA, oldB, oldC, oldD,
-                    lastCalibPath.toString(),
-                    ufit
+                    lastCalibPath.toString()
             );
 
             // 5a. Recursively upload all generated files under output/ and images/ to S3
