@@ -18,13 +18,17 @@ FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
-# Install Python 3.12 + calibration pipeline dependencies
+# Install Python 3.12 + calibration pipeline dependencies.
+# deadsnakes PPA provides python3.12 on jammy; do NOT install the
+# system python3-pip (its 22.x bootstrap imports the removed
+# distutils.cmd on 3.12) — bootstrap pip via ensurepip on 3.12 instead.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 python3.12-venv python3.12-dev python3-pip \
+       python3.12 python3.12-venv python3.12-dev python3.12-distutils \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && python3.12 -m ensurepip --upgrade \
     && pip3 install --no-cache-dir --upgrade pip \
     && pip3 install --no-cache-dir --break-system-packages \
        numpy scipy reportlab matplotlib pint \
