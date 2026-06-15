@@ -18,9 +18,13 @@ FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
-# Install Python + calibration pipeline dependencies
+# Install Python 3.12 + calibration pipeline dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python-is-python3 python3-pip python3-venv \
+    software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv python3.12-dev python3-pip \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
     && pip3 install --no-cache-dir --upgrade pip \
     && pip3 install --no-cache-dir --break-system-packages \
        numpy scipy reportlab matplotlib pint \
@@ -56,7 +60,7 @@ ENV KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 ENV CALIBRATION_SCRIPT_PATH=/app/calibration/scripts/analisi_calib_data.py
 ENV CALIBRATION_MODELS_PATH=/app/calibration/models_in
 ENV CALIBRATION_RUNS_PATH=/tmp/calibration-runs
-ENV PYTHON_CMD=python3
+ENV PYTHON_CMD=python3.12
 
 # Copy the jar file from builder stage
 COPY --from=builder /app/target/dcc-service-*.jar app.jar
