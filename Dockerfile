@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
-       python3.12 python3.12-venv python3.12-dev python3.12-distutils \
+       python3.12 python3.12-venv python3.12-dev \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
     && python3.12 -m ensurepip --upgrade \
     && pip3 install --no-cache-dir --upgrade pip \
