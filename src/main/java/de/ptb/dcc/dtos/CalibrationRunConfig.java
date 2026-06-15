@@ -33,8 +33,12 @@ public class CalibrationRunConfig {
      */
     private String updateIfOutRange = "none";
 
-    /** Enable dimensional unit checks (default: false) */
-    private boolean checkUnits = false;
+    /**
+     * Optional override of the sensor's maxTollerance (Check G as-found accuracy
+     * limit). When null, the value is read from the sensor JSON. Expressed in
+     * the same unit as the sensor JSON (typically °C).
+     */
+    private Double tolerance = null;
 
     /** Enable unit conversion in results (default: false) */
     private boolean convertUnits = false;
@@ -65,8 +69,8 @@ public class CalibrationRunConfig {
     public String getUpdateIfOutRange() { return updateIfOutRange; }
     public void setUpdateIfOutRange(String v) { this.updateIfOutRange = v; }
 
-    public boolean isCheckUnits() { return checkUnits; }
-    public void setCheckUnits(boolean v) { this.checkUnits = v; }
+    public Double getTolerance() { return tolerance; }
+    public void setTolerance(Double v) { this.tolerance = v; }
 
     public boolean isConvertUnits() { return convertUnits; }
     public void setConvertUnits(boolean v) { this.convertUnits = v; }

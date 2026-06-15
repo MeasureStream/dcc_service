@@ -226,7 +226,9 @@ public class PythonBridgeService {
         if (!"none".equals(config.getUpdateIfOutRange())) {
             cmd.add("--update-parameters"); cmd.add(config.getUpdateIfOutRange());
         }
-        if (config.isCheckUnits())     { cmd.add("--check-units"); }
+        if (config.getTolerance() != null) {
+            cmd.add("--tolerance"); cmd.add(String.valueOf(config.getTolerance()));
+        }
         if (config.isConvertUnits())   { cmd.add("--convert-units"); }
         if (config.isNoPdf())          { cmd.add("--no-pdf"); }
         if (config.isNoXml())          { cmd.add("--no-xml"); }
