@@ -3,7 +3,9 @@ package de.ptb.dcc.controllers;
 import de.ptb.dcc.dtos.CalibrationDto;
 import de.ptb.dcc.dtos.CalibrationRunConfig;
 import de.ptb.dcc.dtos.CalibrationRunConfigOptions;
+import de.ptb.dcc.dtos.CalibrationStatusDto;
 import de.ptb.dcc.dtos.DccDto;
+import de.ptb.dcc.dtos.ManualCertificateRequest;
 import de.ptb.dcc.dtos.WizardStepRequest;
 import de.ptb.dcc.entities.Calibration;
 import de.ptb.dcc.entities.CalibrationRequest;
@@ -34,6 +36,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -101,6 +104,62 @@ public class CalibrationWizardController {
         }
     }
 
+    /**
+     * POST /api/calibrations/manual/init
+     *
+     * Creates a new certificate from scratch (no prior CalibrationRequest from Kafka).
+     * The backend creates an internal CalibrationRequest, initialises the wizard with
+     * all five step templates, and returns the CalibrationDto so the frontend can open
+     * the CertificatoWizard immediately.
+     *
+     * Body: { name (required), sensorId (optional), muId (optional) }
+     */
+    @PostMapping("/manual/init")
+    public ResponseEntity<?> initManualWizard(
+            @RequestBody ManualCertificateRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        try {
+            if (req.getName() == null || req.getName().isBlank()) {
+                return ResponseEntity.badRequest().body("{\"error\": \"name is required\"}");
+            }
+
+            String sub = (jwt != null && jwt.getSubject() != null) ? jwt.getSubject() : "system";
+
+            // Build a unique calibration_id for the internal CalibrationRequest
+            String calibId = "man-" + (req.getSensorId() != null ? req.getSensorId() : "0")
+                    + "-" + (req.getMuId() != null ? req.getMuId() : "0")
+                    + "-" + Instant.now().toEpochMilli();
+
+            CalibrationRequest request = new CalibrationRequest();
+            request.setCalibrationId(calibId);
+            request.setCalibratorId(0L);
+            request.setSensorId(req.getSensorId());
+            request.setMuId(req.getMuId());
+            request.setInputJson("{}");
+            request.setProcessedJson("{}");
+            request.setProcessed(false);
+
+            CalibrationRequest saved = calibrationRequestRepository.save(request);
+            log.info("[Wizard] Created manual CalibrationRequest: id={} calibId={}", saved.getId(), calibId);
+
+            CalibrationDto dto = wizardService.initWizard(saved.getId(), sub);
+
+            // Store the certificate name on the Calibration description field so
+            // save-dcc-blank can retrieve it later
+            wizardService.calibrationRepo().findById(dto.getId()).ifPresent(c -> {
+                c.setDescription(req.getName());
+                wizardService.calibrationRepo().save(c);
+            });
+            dto.setDescription(req.getName());
+
+            return ResponseEntity.ok(dto);
+        } catch (Exception e) {
+            log.error("[Wizard] manual/init failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("{\"error\": \"" + e.getMessage().replace("\"", "'") + "\"}");
+        }
+    }
+
     /** Legge lo stato corrente del wizard per calibrationId */
     @GetMapping("/wizard/{calibrationId}")
     public ResponseEntity<CalibrationDto> getWizard(@PathVariable Long calibrationId) {
@@ -119,6 +178,28 @@ public class CalibrationWizardController {
         return wizardService.calibrationRepo().findByCalibrationRequestId(requestId)
                 .map(c -> ResponseEntity.ok(wizardService.toDto(c)))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * GET /api/calibrations/requests/{requestId}/calibration/status
+     * Slim status (no wizard JSON fields). Usato dalla tabella per decidere quali bottoni mostrare.
+     * 404 se non esiste ancora una Calibration per questa request (nessun bottone wizard/run/save).
+     */
+    @GetMapping("/requests/{requestId}/calibration/status")
+    public ResponseEntity<CalibrationStatusDto> getCalibrationStatusByRequest(@PathVariable Long requestId) {
+        return wizardService.calibrationRepo().findByCalibrationRequestId(requestId)
+                .map(c -> ResponseEntity.ok(toStatusDto(c)))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    private CalibrationStatusDto toStatusDto(Calibration c) {
+        return new CalibrationStatusDto(
+                c.getId(),
+                c.getCertificatoIn() != null && !c.getCertificatoIn().isBlank(),
+                c.getRunStatus(),
+                c.getDccXml() != null && !c.getDccXml().isBlank(),
+                c.getRunId()
+        );
     }
 
     /** Salva il JSON di uno step (0-4) */
@@ -265,6 +346,68 @@ public class CalibrationWizardController {
 
         } catch (Exception e) {
             log.error("[Wizard] save-dcc failed for calibrationId={}: {}", calibrationId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("{\"error\": \"" + e.getMessage().replace("\"", "'") + "\"}");
+        }
+    }
+
+    /**
+     * POST /api/calibrations/wizard/{calibrationId}/save-dcc-blank
+     *
+     * Creates a DCC record directly from the certificato_in JSON (no calibration
+     * run required).  If certificato_in has not been built yet the endpoint runs
+     * the build step first.
+     *
+     * The certificato_in JSON is stored as the DCC's dccJson.  Later
+     * sign/validate via gemimeg will convert it to XML/PDF on demand.
+     */
+    @PostMapping("/wizard/{calibrationId}/save-dcc-blank")
+    public ResponseEntity<?> saveDccBlank(@PathVariable Long calibrationId) {
+        try {
+            Calibration calib = wizardService.calibrationRepo().findById(calibrationId)
+                    .orElseThrow(() -> new RuntimeException("Calibration not found: " + calibrationId));
+
+            // Auto-build certificato_in if not done yet
+            if (calib.getCertificatoIn() == null || calib.getCertificatoIn().isBlank()) {
+                log.info("[Wizard] save-dcc-blank: building certificato_in for calibrationId={}", calibrationId);
+                CalibrationDto built = wizardService.buildCertificatoIn(calibrationId);
+                calib = wizardService.calibrationRepo().findById(calibrationId)
+                        .orElseThrow(() -> new RuntimeException("Calibration disappeared: " + calibrationId));
+            }
+
+            String dccJson = calib.getCertificatoIn();
+
+            // Resolve sensorId from the CalibrationRequest
+            Long calibrationRequestId = calib.getCalibrationRequestId();
+            String sensorId = null;
+            if (calibrationRequestId != null) {
+                CalibrationRequest req = calibrationRequestRepository
+                        .findById(calibrationRequestId).orElse(null);
+                if (req != null && req.getSensorId() != null) {
+                    sensorId = req.getSensorId().toString();
+                }
+            }
+
+            // Use the description field as DCC name (set during manual/init)
+            String dccName = calib.getDescription();
+            if (dccName == null || dccName.isBlank()) {
+                dccName = "DCC — calibration-" + calibrationId;
+            }
+
+            de.ptb.dcc.entities.Dcc savedDcc = dccService.createDcc(
+                    sensorId,
+                    dccName,
+                    dccJson,
+                    calibrationRequestId
+            );
+
+            DccDto dto = dccService.mapToDto(savedDcc);
+            log.info("[Wizard] DCC blank-saved: id={} sensorId={} calibrationRequestId={}",
+                    dto.getId(), dto.getSensorId(), calibrationRequestId);
+            return ResponseEntity.ok(dto);
+
+        } catch (Exception e) {
+            log.error("[Wizard] save-dcc-blank failed for calibrationId={}: {}", calibrationId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("{\"error\": \"" + e.getMessage().replace("\"", "'") + "\"}");
         }
