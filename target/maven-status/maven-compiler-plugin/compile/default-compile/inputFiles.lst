@@ -5,6 +5,7 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\Calibra
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\DccService.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\MeasurestreamCompany.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\Dcc.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\PagedResponse.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\KafkaCalibrationConsumer.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccUpdateRequest.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\UserRepository.java
@@ -17,6 +18,7 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\Cal
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\User.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationMessageDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\services\AnagraficaSeeder.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationMessageLiteDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\controllers\CalibrationWizardController.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationRunConfig.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\entities\ClientCompany.java
@@ -61,4 +63,5 @@ C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\Calibration
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\repositories\MeasurestreamCompanyRepository.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\sign\verify_xml.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\DccCreateRequest.java
+C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationStatusDto.java
 C:\code\thesis-dcc\backend\dcc_service\src\main\java\de\ptb\dcc\dtos\CalibrationRequestDto.java

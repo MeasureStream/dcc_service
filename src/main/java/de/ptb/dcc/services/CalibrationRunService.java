@@ -238,7 +238,7 @@ public class CalibrationRunService {
             Path pdfOutputPath      = outputDir.resolve("ntc_cert_funzione.pdf");
             Path xmlOutputPath      = outputDir.resolve("ntc_calibration_certificate.xml");
             Path conformityPath     = outputDir.resolve("conformity.json");
-            Path lastCalibPath      = outputDir.resolve("last_calibration.json");
+            Path lastCalibPath      = outputDir.resolve("result_calibration.json");
 
             // 4. Mark as RUNNING
             calib.setRunId(runId);
@@ -408,14 +408,14 @@ public class CalibrationRunService {
     }
 
     /**
-     * Recursively scans output/ and images/ directories under runDir
-     * and returns URL paths for all files. Uses S3 URLs when available,
-     * local static URLs as fallback. Skips the input/ directory.
+     * Recursively scans the images/ directory under runDir and returns URL paths
+     * for all plot images. Uses S3 URLs when available, local static URLs as fallback.
+     * Skips input/ and output/ (those are non-plot artifacts served via dedicated endpoints).
      */
     private List<String> collectFileUrls(String runId, Path runDir, boolean s3Available) {
         List<String> urls = new ArrayList<>();
         String base = s3Available ? S3_BASE : STATIC_BASE;
-        for (String root : List.of("output", "images")) {
+        for (String root : List.of("images")) {
             Path rootDir = runDir.resolve(root);
             if (!Files.isDirectory(rootDir)) continue;
             try (Stream<Path> stream = Files.walk(rootDir)) {

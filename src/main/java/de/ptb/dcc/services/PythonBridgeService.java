@@ -165,7 +165,7 @@ public class PythonBridgeService {
      * @param oldB        previous coefficient B from DB
      * @param oldC        previous coefficient C from DB (cubic a2 or cube-log C3)
      * @param oldD        previous coefficient D from DB (cubic a3)
-     * @param lastCalibrationPath  absolute path for last_calibration.json output
+     * @param lastCalibrationPath  absolute path for result_calibration.json output
      */
     public CalibrationRunResult runCalibration(
             String scriptPath,
@@ -199,22 +199,30 @@ public class PythonBridgeService {
         cmd.add("--conformity-output"); cmd.add(conformityOutput);
         cmd.add("--images-dir");  cmd.add(imagesDir);
 
-        // Inject previous calibration coefficients from DB so Python uses them as old_A/B/C/D
+        // Inject previous calibration coefficients from DB so Python uses them as old_A/B/C/D.
         // These override the 0.0 placeholders in the sensor JSON template.
-        // C and D are only meaningful for cubic procedures; passing them to linear
-        // causes argparse errors when values are malformed or null.
-        boolean isCubic = config.getProcedure() != null
+        // Rule: never substitute 0 for a missing coefficient — if the DB value is null
+        // (sensor never calibrated, or a non-cubic sensor that has no C/D column),
+        // omit the --old-X flag entirely. Passing --old-c without --old-d (or vice versa)
+        // makes the Python argparse fail with "the following arguments are required",
+        // so for cubic procedures we emit C and D as a pair: present only if both are non-null.
+        boolean needsCoeffCD = config.getProcedure() != null
                 && (config.getProcedure().equalsIgnoreCase("cubic")
                     || config.getProcedure().equalsIgnoreCase("cubic_interp")
-                    || config.getProcedure().equalsIgnoreCase("cube-log"));
+                    || config.getProcedure().equalsIgnoreCase("quadratic")
+                    || config.getProcedure().equalsIgnoreCase("steinhart"));
         if (oldA != null) { cmd.add("--old-a"); cmd.add(String.valueOf(oldA)); }
         if (oldB != null) { cmd.add("--old-b"); cmd.add(String.valueOf(oldB)); }
-        if (isCubic && oldC != null) { cmd.add("--old-c"); cmd.add(String.valueOf(oldC)); }
-        if (isCubic && oldD != null) { cmd.add("--old-d"); cmd.add(String.valueOf(oldD)); }
+        if (needsCoeffCD && oldC != null) {
+            cmd.add("--old-c"); cmd.add(String.valueOf(oldC));
+        }
+        if (needsCoeffCD && oldD != null) {
+            cmd.add("--old-d"); cmd.add(String.valueOf(oldD));
+        }
 
-        // R18: last-calibration JSON output for downstream / next calibration
+        // R18: result-calibration JSON output for downstream / next calibration
         if (lastCalibrationPath != null) {
-            cmd.add("--last-calibration"); cmd.add(lastCalibrationPath);
+            cmd.add("--result-calibration"); cmd.add(lastCalibrationPath);
         }
 
         if (config.getProcedure() != null && !config.getProcedure().isBlank()) {

@@ -17,7 +17,8 @@ public class CalibrationRunConfigOptions {
 
     /** Supported procedure values */
     private List<String> procedures = List.of(
-            "linear", "cubic", "cube-log", "linear_interp", "cubic_interp"
+            "linear", "cubic", "quadratic", "steinhart",
+            "linear_interp", "cubic_interp"
     );
 
     /** The run ID that will be used for this calibration's output directory */

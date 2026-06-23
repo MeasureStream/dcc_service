@@ -17,6 +17,7 @@ de\ptb\dcc\repositories\CalibrationRepository.class
 de\ptb\dcc\repositories\MeasurementUnitRepository.class
 test_keys.class
 de\ptb\dcc\entities\MeasurementUnit.class
+de\ptb\dcc\dtos\CalibrationStatusDto.class
 de\ptb\dcc\repositories\CalibratorRequestRepository.class
 de\ptb\dcc\repositories\UserRepository.class
 de\ptb\dcc\services\AnagraficaSeeder.class
@@ -56,6 +57,7 @@ de\ptb\dcc\dtos\CalibrationRunConfig.class
 de\ptb\dcc\repositories\ClientCompanyRepository.class
 de\ptb\dcc\entities\Calibration.class
 test_java_signing.class
+de\ptb\dcc\dtos\CalibrationMessageLiteDto.class
 de\ptb\dcc\services\DccSigningService.class
 de\ptb\dcc\services\S3Service.class
 de\ptb\dcc\configurations\SecurityConfig.class
@@ -65,5 +67,6 @@ de\ptb\dcc\repositories\ControlUnitRepository.class
 de\ptb\dcc\dtos\AnagraficaDto.class
 de\ptb\dcc\configurations\CustomJwtGrantedAuthoritiesConverter.class
 de\ptb\dcc\dtos\CalibrationRunConfigOptions.class
+de\ptb\dcc\dtos\PagedResponse.class
 de\ptb\dcc\services\CalibrationRunService.class
 de\ptb\dcc\controllers\CalibrationController.class

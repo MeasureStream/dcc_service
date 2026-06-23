@@ -74,10 +74,16 @@ public class SensorCoefficientUpdater {
                     newC = jsonDouble(calibResult, "_a2");
                     newD = jsonDouble(calibResult, "_a3");
                 }
-                case "cube-log" -> {
-                    newA = jsonDouble(calibResult, "_C0");
-                    newB = jsonDouble(calibResult, "_C1");
-                    newC = jsonDouble(calibResult, "_C3");
+                case "quadratic" -> {
+                    newA = jsonDouble(calibResult, "_a0");
+                    newB = jsonDouble(calibResult, "_a1");
+                    newC = jsonDouble(calibResult, "_a2");
+                    newD = 0.0;
+                }
+                case "steinhart" -> {
+                    newA = jsonDouble(calibResult, "_a");
+                    newB = jsonDouble(calibResult, "_b");
+                    newC = jsonDouble(calibResult, "_c");
                     newD = 0.0;
                 }
                 default -> {
