@@ -120,7 +120,11 @@ public class CalibrationRunService {
             throw new IllegalStateException("CalibrationRequest has no processedJson. Cannot run calibration.");
         }
 
-        // Resolve Sensor from DB — source of truth for current calibration coefficients
+        // Resolve Sensor from DB — used to write back the new coefficients after a successful run.
+        // We deliberately do NOT read old A/B/C/D from the Sensor entity here: the orchestrator
+        // reads the previous run's last_calibration.json (passed via --last-calibration) which is
+        // the authoritative source for the as-found baseline. That file includes a top-level
+        // `calibration_done` flag the orchestrator already understands.
         Sensor sensor = null;
         if (req.getSensorId() != null) {
             sensor = sensorRepo.findById(req.getSensorId()).orElse(null);
@@ -139,35 +143,48 @@ public class CalibrationRunService {
                     req.getSensorId(), req.getMuId());
         }
 
-        // Read current DB coefficients to pass as --old-a/b/c/d to the Python script.
-        // null = not yet calibrated (first run) → Python uses its engine defaults.
-        Double oldA = (sensor != null) ? sensor.getCoeffA() : null;
-        Double oldB = (sensor != null) ? sensor.getCoeffB() : null;
-        Double oldC = (sensor != null) ? sensor.getCoeffC() : null;
-        Double oldD = (sensor != null) ? sensor.getCoeffD() : null;
-
-        log.info("[CalibRunService] resolved sensor.id={}, coeffs from DB: A={} B={} C={} D={}",
-                sensor != null ? sensor.getId() : null, oldA, oldB, oldC, oldD);
-
-        // R18/R19: look up previous successful calibration for this sensor to feed rmse_pre as ufit
+        // R18/R19: look up the previous successful calibration for THIS SENSOR (not muId) and
+        // walk back until we find a run that actually updated the coefficients. We then:
+        //   - pass that run's last_calibration.json as --last-calibration (the orchestrator
+        //     reads old A/B/C/D and the previous fit residual from it);
+        //   - propagate its rmse_pre as ufit in the sensor JSON for the next fit.
+        // The walk-back skips runs where calibration_done = "not_necessary" — those kept the
+        // previous coefficients unchanged, so their rmse_pre is not a fresh fit residual.
+        // The JSON payload is stashed here and written to disk later, once the run's
+        // inputDir has been created.
+        String resolvedPrevJson = null;
         Double ufit = null;
-        if (calib.getMuId() != null) {
-            var prevCalib = calibrationRepo.findTopByMuIdAndRunStatusAndIdNotOrderByCreatedAtDesc(
-                    calib.getMuId(), "SUCCESS", calib.getId());
-            if (prevCalib.isPresent()) {
-                String prevJson = prevCalib.get().getLastCalibrationJson();
-                if (prevJson != null && !prevJson.isBlank()) {
-                    try {
-                        var mapper = new ObjectMapper();
-                        var node = mapper.readTree(prevJson);
-                        if (node.has("fit_quality") && node.get("fit_quality").has("rmse_pre")) {
-                            ufit = node.get("fit_quality").get("rmse_pre").asDouble();
-                            log.info("[CalibRunService] Previous calibration rmse_pre={} → will inject as ufit in sensor JSON", ufit);
-                        }
-                    } catch (Exception e) {
-                        log.warn("[CalibRunService] Could not parse previous calibration JSON: {}", e.getMessage());
+        Long sensorId = (req != null) ? req.getSensorId() : null;
+        if (sensorId != null) {
+            var history = calibrationRepo.findBySensorIdAndRunStatusExcluding(
+                    sensorId, "SUCCESS", calib.getId());
+            for (var prev : history) {
+                String prevJson = prev.getLastCalibrationJson();
+                if (prevJson == null || prevJson.isBlank()) continue;
+                try {
+                    var mapper = new ObjectMapper();
+                    var node = mapper.readTree(prevJson);
+                    String done = node.has("calibration_done")
+                            ? node.get("calibration_done").asText("done") : "done";
+                    if ("not_necessary".equalsIgnoreCase(done)) {
+                        log.info("[CalibRunService] sensor_id={} prev calib id={} skipped: calibration_done=not_necessary (no fresh fit)",
+                                sensorId, prev.getId());
+                        continue;
                     }
+                    if (node.has("fit_quality") && node.get("fit_quality").has("rmse_pre")) {
+                        ufit = node.get("fit_quality").get("rmse_pre").asDouble();
+                    }
+                    resolvedPrevJson = prevJson;
+                    log.info("[CalibRunService] sensor_id={} resolved prev calib id={} rmse_pre={} (will write to --last-calibration)",
+                            sensorId, prev.getId(), ufit);
+                    break;
+                } catch (Exception e) {
+                    log.warn("[CalibRunService] Could not parse previous calibration JSON for id={}: {}",
+                            prev.getId(), e.getMessage());
                 }
+            }
+            if (resolvedPrevJson == null) {
+                log.info("[CalibRunService] sensor_id={} has no prior SUCCESS run with a stored JSON — first calibration", sensorId);
             }
         }
 
@@ -177,6 +194,18 @@ public class CalibrationRunService {
         Path inputDir   = runDir.resolve("input");
         Path outputDir  = runDir.resolve("output");
         Path imagesDir  = runDir.resolve("images");
+
+        // Materialize the resolved previous-calibration JSON to disk so the orchestrator
+        // can read it via --last-calibration. null on the first calibration.
+        java.nio.file.Path lastCalibInputPath = null;
+        if (resolvedPrevJson != null) {
+            try {
+                lastCalibInputPath = inputDir.resolve("last_calibration.json");
+                Files.writeString(lastCalibInputPath, resolvedPrevJson, StandardCharsets.UTF_8);
+            } catch (java.io.IOException e) {
+                log.warn("[CalibRunService] Could not write last_calibration.json for orchestrator: {}", e.getMessage());
+            }
+        }
 
         try {
             // 1. Create directory structure
@@ -245,7 +274,10 @@ public class CalibrationRunService {
             calib.setRunStatus("RUNNING");
             calibrationRepo.save(calib);
 
-            // 5. Launch Python — pass DB coefficients as --old-a/b/c/d
+            // 5. Launch Python — pass the previous run's last_calibration.json via --last-calibration.
+            //    The orchestrator reads old A/B/C/D and the previous fit's rmse_pre from it
+            //    (it also re-injects rmse_pre as ufit in the sensor JSON if needed, but we
+            //    already did that above for the run we want to instrument).
             PythonBridgeService.CalibrationRunResult result = pythonBridge.runCalibration(
                     scriptPath.toString(),
                     inputJsonPath.toString(),
@@ -258,8 +290,9 @@ public class CalibrationRunService {
                     conformityPath.toString(),
                     imagesDir.toString(),
                     config,
-                    oldA, oldB, oldC, oldD,
-                    lastCalibPath.toString()
+                    null, null, null, null,            // --old-a/b/c/d intentionally not passed
+                    lastCalibPath.toString(),
+                    lastCalibInputPath                  // --last-calibration (may be null on first run)
             );
 
             // 5a. Recursively upload all generated files under output/ and images/ to S3

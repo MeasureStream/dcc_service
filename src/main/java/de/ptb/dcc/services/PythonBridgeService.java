@@ -161,11 +161,16 @@ public class PythonBridgeService {
      * @param conformityOutput absolute path for conformity JSON output
      * @param imagesDir   absolute path to the images base directory
      * @param config      user-selected CLI options
-     * @param oldA        previous coefficient A from DB (null = first calibration, use defaults)
-     * @param oldB        previous coefficient B from DB
-     * @param oldC        previous coefficient C from DB (cubic a2 or cube-log C3)
-     * @param oldD        previous coefficient D from DB (cubic a3)
-     * @param lastCalibrationPath  absolute path for result_calibration.json output
+     * @param oldA        previous coefficient A (null: do not emit --old-a; the orchestrator
+     *                    will fall back to the --last-calibration file or sensor JSON)
+     * @param oldB        previous coefficient B
+     * @param oldC        previous coefficient C / a2 / c (cubic/quadratic/steinhart)
+     * @param oldD        previous coefficient D / a3 (cubic)
+     * @param lastCalibrationPath  absolute path for result_calibration.json OUTPUT
+     *                             (the orchestrator writes the current run's full result here)
+     * @param lastCalibrationInputPath  absolute path to the previous run's
+     *                             last_calibration.json (orchestrator reads it to recover
+     *                             old A/B/C/D and the previous fit residual). null on first run.
      */
     public CalibrationRunResult runCalibration(
             String scriptPath,
@@ -183,7 +188,8 @@ public class PythonBridgeService {
             Double oldB,
             Double oldC,
             Double oldD,
-            String lastCalibrationPath
+            String lastCalibrationPath,
+            java.nio.file.Path lastCalibrationInputPath
     ) throws IOException, InterruptedException {
 
         List<String> cmd = new ArrayList<>();
@@ -199,13 +205,10 @@ public class PythonBridgeService {
         cmd.add("--conformity-output"); cmd.add(conformityOutput);
         cmd.add("--images-dir");  cmd.add(imagesDir);
 
-        // Inject previous calibration coefficients from DB so Python uses them as old_A/B/C/D.
-        // These override the 0.0 placeholders in the sensor JSON template.
-        // Rule: never substitute 0 for a missing coefficient — if the DB value is null
-        // (sensor never calibrated, or a non-cubic sensor that has no C/D column),
-        // omit the --old-X flag entirely. Passing --old-c without --old-d (or vice versa)
-        // makes the Python argparse fail with "the following arguments are required",
-        // so for cubic procedures we emit C and D as a pair: present only if both are non-null.
+        // The orchestrator resolves old A/B/C/D via the chain
+        //   CLI --old-X  >  --last-calibration file  >  sensor JSON coeff*
+        // We rely on the file path here, so by default we do NOT pass --old-X. Callers may
+        // still pass them as an override (e.g. ad-hoc test scripts).
         boolean needsCoeffCD = config.getProcedure() != null
                 && (config.getProcedure().equalsIgnoreCase("cubic")
                     || config.getProcedure().equalsIgnoreCase("cubic_interp")
@@ -223,6 +226,11 @@ public class PythonBridgeService {
         // R18: result-calibration JSON output for downstream / next calibration
         if (lastCalibrationPath != null) {
             cmd.add("--result-calibration"); cmd.add(lastCalibrationPath);
+        }
+        // The previous run's JSON is read by the orchestrator to recover old A/B/C/D
+        // and the previous fit's rmse_pre (the latter is re-injected as ufit above).
+        if (lastCalibrationInputPath != null) {
+            cmd.add("--last-calibration"); cmd.add(lastCalibrationInputPath.toString());
         }
 
         if (config.getProcedure() != null && !config.getProcedure().isBlank()) {
