@@ -32,10 +32,16 @@ RUN mkdir -p /tmp/calibration-runs && chown spring:spring /tmp/calibration-runs
 USER spring:spring
 
 # Environment Variables
+# SPRING_DATASOURCE_PASSWORD is provided as a build ARG (with a dev-only
+# default) so the image does not embed a secret in an ENV instruction.
+# Override at build/run time:
+#   docker build --build-arg SPRING_DATASOURCE_PASSWORD=...
+#   docker run  -e   SPRING_DATASOURCE_PASSWORD=...
+ARG SPRING_DATASOURCE_PASSWORD=aaaa
 ENV SERVER_PORT=8080
 ENV SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/SENSORS
 ENV SPRING_DATASOURCE_USERNAME=measurestream_admin
-ENV SPRING_DATASOURCE_PASSWORD=aaaa
+ENV SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
 ENV SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
 ENV SPRING_JPA_HIBERNATE_DDL_AUTO=update
 ENV SPRING_JPA_SHOW_SQL=true
