@@ -208,7 +208,15 @@ public class CalibrationRunService {
         }
 
         try {
-            // 1. Create directory structure
+            // 1. Create directory structure — clear images/ on re-run to avoid stale PNGs
+            //    from a previous procedure (e.g. linear → cubic would leave both sets otherwise)
+            if (Files.exists(imagesDir)) {
+                try (var walk = Files.walk(imagesDir)) {
+                    walk.sorted(java.util.Comparator.reverseOrder())
+                        .filter(p -> !p.equals(imagesDir))
+                        .forEach(p -> { try { Files.delete(p); } catch (Exception ignored) {} });
+                }
+            }
             Files.createDirectories(inputDir);
             Files.createDirectories(outputDir);
             Files.createDirectories(imagesDir);
