@@ -173,6 +173,36 @@ public class S3Service {
         }
     }
 
+    /**
+     * Deletes every object under the given key prefix. Used before re-uploading a
+     * calibration run's artefacts, so a stale object from a previous attempt (e.g. a
+     * fig5_post_residuals.png uploaded when a parameter adjustment was applied, still
+     * sitting there after a later no-adjustment re-run that no longer generates it)
+     * does not linger and get served to the frontend.
+     *
+     * Safe to call with a prefix that has no matching objects (no-op).
+     */
+    public int deleteObjectsByPrefix(String prefix) {
+        if (s3Client == null) return 0;
+        List<String> keys = listKeys(prefix);
+        if (keys.isEmpty()) return 0;
+        try {
+            List<ObjectIdentifier> toDelete = keys.stream()
+                    .map(k -> ObjectIdentifier.builder().key(k).build())
+                    .collect(Collectors.toList());
+            DeleteObjectsRequest req = DeleteObjectsRequest.builder()
+                    .bucket(bucket)
+                    .delete(Delete.builder().objects(toDelete).build())
+                    .build();
+            s3Client.deleteObjects(req);
+            System.out.println("[INFO] Deleted " + toDelete.size() + " stale S3 object(s) under prefix: " + prefix);
+            return toDelete.size();
+        } catch (Exception e) {
+            System.err.println("[ERROR] S3 deleteObjectsByPrefix failed for prefix " + prefix + ": " + e.getMessage());
+            return 0;
+        }
+    }
+
     public byte[] downloadFile(String key) {
         if (s3Client == null) {
             System.err.println("[ERROR] S3Client not initialized. Cannot download " + key);

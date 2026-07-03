@@ -23,6 +23,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -143,8 +144,17 @@ public class CalibrationRunService {
                     req.getSensorId(), req.getMuId());
         }
 
+        // Determine the effective procedure for THIS run so the history walk-back only
+        // considers previous runs fitted with the SAME model. A previous run's coefficients
+        // (e.g. cubic a0..a3) are meaningless as an as-found baseline for a different
+        // procedure (e.g. steinhart a,b,c) — mixing them would silently corrupt the fit.
+        // Falls back to the sensor JSON's own declared calibration.type when the user did
+        // not override --procedure for this run (mirrors the orchestrator's own fallback).
+        String effectiveProcedure = resolveEffectiveProcedure(config);
+
         // R18/R19: look up the previous successful calibration for THIS SENSOR (not muId) and
-        // walk back until we find a run that actually updated the coefficients. We then:
+        // walk back until we find a run that (a) used the SAME procedure and (b) actually
+        // updated the coefficients. We then:
         //   - pass that run's last_calibration.json as --last-calibration (the orchestrator
         //     reads old A/B/C/D and the previous fit residual from it);
         //   - propagate its rmse_pre as ufit in the sensor JSON for the next fit.
@@ -160,10 +170,21 @@ public class CalibrationRunService {
                     sensorId, "SUCCESS", calib.getId());
             for (var prev : history) {
                 String prevJson = prev.getLastCalibrationJson();
-                if (prevJson == null || prevJson.isBlank()) continue;
+                if (prevJson == null || prevJson.isBlank()) {
+                    log.info("[CalibRunService] sensor_id={} prev calib id={} skipped: no analysis stored (blank last_calibration_json)",
+                            sensorId, prev.getId());
+                    continue;
+                }
                 try {
                     var mapper = new ObjectMapper();
                     var node = mapper.readTree(prevJson);
+                    String prevProcedure = node.has("model") ? node.get("model").asText(null) : null;
+                    if (effectiveProcedure != null && prevProcedure != null
+                            && !effectiveProcedure.equalsIgnoreCase(prevProcedure)) {
+                        log.info("[CalibRunService] sensor_id={} prev calib id={} skipped: procedure mismatch (prev={}, current={})",
+                                sensorId, prev.getId(), prevProcedure, effectiveProcedure);
+                        continue;
+                    }
                     String done = node.has("calibration_done")
                             ? node.get("calibration_done").asText("done") : "done";
                     if ("not_necessary".equalsIgnoreCase(done)) {
@@ -175,8 +196,8 @@ public class CalibrationRunService {
                         ufit = node.get("fit_quality").get("rmse_pre").asDouble();
                     }
                     resolvedPrevJson = prevJson;
-                    log.info("[CalibRunService] sensor_id={} resolved prev calib id={} rmse_pre={} (will write to --last-calibration)",
-                            sensorId, prev.getId(), ufit);
+                    log.info("[CalibRunService] sensor_id={} resolved prev calib id={} procedure={} rmse_pre={} (will write to --last-calibration)",
+                            sensorId, prev.getId(), prevProcedure, ufit);
                     break;
                 } catch (Exception e) {
                     log.warn("[CalibRunService] Could not parse previous calibration JSON for id={}: {}",
@@ -184,42 +205,48 @@ public class CalibrationRunService {
                 }
             }
             if (resolvedPrevJson == null) {
-                log.info("[CalibRunService] sensor_id={} has no prior SUCCESS run with a stored JSON — first calibration", sensorId);
+                log.info("[CalibRunService] sensor_id={} procedure={} has no matching prior SUCCESS run with a stored JSON — first calibration for this procedure",
+                        sensorId, effectiveProcedure);
             }
         }
 
         String runId = deriveRunId(calib);
         Path runsBase   = resolveRunsDir();
+        // Stable, published location for this calibration's latest successful run —
+        // used only as a local-serving fallback (STATIC_BASE) when S3 is unavailable.
         Path runDir     = runsBase.resolve(runId);
-        Path inputDir   = runDir.resolve("input");
-        Path outputDir  = runDir.resolve("output");
-        Path imagesDir  = runDir.resolve("images");
-
-        // Materialize the resolved previous-calibration JSON to disk so the orchestrator
-        // can read it via --last-calibration. null on the first calibration.
-        java.nio.file.Path lastCalibInputPath = null;
-        if (resolvedPrevJson != null) {
-            try {
-                lastCalibInputPath = inputDir.resolve("last_calibration.json");
-                Files.writeString(lastCalibInputPath, resolvedPrevJson, StandardCharsets.UTF_8);
-            } catch (java.io.IOException e) {
-                log.warn("[CalibRunService] Could not write last_calibration.json for orchestrator: {}", e.getMessage());
-            }
-        }
+        // Isolated per-INVOCATION working directory: local files are created and
+        // destroyed entirely inside here, so two concurrent runs of the SAME
+        // calibration (e.g. a retry fired while a slow previous attempt is still
+        // running) never share — and corrupt — each other's input/output files.
+        // Nothing under here is a source of truth: once this run finishes, its
+        // meaningful outputs live in the DB columns and (when available) S3;
+        // this directory is deleted (or, only if S3 is down, moved into the
+        // stable runDir so local static-serving still has something to show).
+        Path attemptDir = runsBase.resolve("_attempts").resolve(runId + "-" + UUID.randomUUID());
+        Path inputDir   = attemptDir.resolve("input");
+        Path outputDir  = attemptDir.resolve("output");
+        Path imagesDir  = attemptDir.resolve("images");
 
         try {
-            // 1. Create directory structure — clear images/ on re-run to avoid stale PNGs
-            //    from a previous procedure (e.g. linear → cubic would leave both sets otherwise)
-            if (Files.exists(imagesDir)) {
-                try (var walk = Files.walk(imagesDir)) {
-                    walk.sorted(java.util.Comparator.reverseOrder())
-                        .filter(p -> !p.equals(imagesDir))
-                        .forEach(p -> { try { Files.delete(p); } catch (Exception ignored) {} });
-                }
-            }
+            // 1. Create the isolated working directory structure. Always fresh —
+            //    attemptDir has a random suffix, so there is nothing to clear.
             Files.createDirectories(inputDir);
             Files.createDirectories(outputDir);
             Files.createDirectories(imagesDir);
+
+            // Materialize the resolved previous-calibration JSON to disk now that
+            // inputDir actually exists, so the orchestrator can read it via
+            // --last-calibration. null on the first calibration for this procedure.
+            java.nio.file.Path lastCalibInputPath = null;
+            if (resolvedPrevJson != null) {
+                try {
+                    lastCalibInputPath = inputDir.resolve("last_calibration.json");
+                    Files.writeString(lastCalibInputPath, resolvedPrevJson, StandardCharsets.UTF_8);
+                } catch (java.io.IOException e) {
+                    log.warn("[CalibRunService] Could not write last_calibration.json for orchestrator: {}", e.getMessage());
+                }
+            }
 
             // 2. Write input files
             Path inputJsonPath = inputDir.resolve("export.json");
@@ -303,11 +330,19 @@ public class CalibrationRunService {
                     lastCalibInputPath                  // --last-calibration (may be null on first run)
             );
 
-            // 5a. Recursively upload all generated files under output/ and images/ to S3
+            // 5a. Recursively upload all generated files under output/ and images/ to S3.
+            //     Delete any objects already sitting under THIS calibration's own runId
+            //     prefix first — a re-run (e.g. procedure changed, or a parameter
+            //     adjustment that previously produced fig5_post_residuals.png followed by
+            //     a no-adjustment run that doesn't) must not leave stale files served
+            //     alongside the fresh ones. Scoped strictly to this runId: never touches
+            //     other calibrations, sensors, or runs.
             boolean s3Available = false;
             if (s3Service.isAvailable()) {
                 try {
                     String s3Prefix = S3_KEY_PREFIX + runId + "/";
+                    s3Service.deleteObjectsByPrefix(s3Prefix + "output");
+                    s3Service.deleteObjectsByPrefix(s3Prefix + "images");
                     uploadDirectoryToS3(outputDir, s3Prefix + "output");
                     uploadDirectoryToS3(imagesDir, s3Prefix + "images");
                     s3Available = true;
@@ -324,7 +359,31 @@ public class CalibrationRunService {
             String conformityJson = readIfExists(conformityPath);
             String dccXml         = readIfExists(xmlOutputPath);
             String lastCalibJson  = readIfExists(lastCalibPath);
-            List<String> fileUrls = collectFileUrls(runId, runDir, s3Available);
+            // Defense in depth: the orchestrator does not write result_calibration.json
+            // (and deletes a stale one from a previous attempt on this same calibration)
+            // whenever no parameter adjustment was applied — so lastCalibJson should
+            // normally already be null here. If a stale file somehow survived (older
+            // script version, race condition, ...), never persist a
+            // calibration_done == "not_necessary" payload as if it were a fresh
+            // adjustment: the DB column must only ever contain coefficients that were
+            // actually applied to the sensor.
+            if (lastCalibJson != null) {
+                try {
+                    var node = new ObjectMapper().readTree(lastCalibJson);
+                    String done = node.has("calibration_done") ? node.get("calibration_done").asText("done") : "done";
+                    if ("not_necessary".equalsIgnoreCase(done)) {
+                        log.info("[CalibRunService] Discarding stale result_calibration.json (calibration_done=not_necessary) for calibration {}", calibrationId);
+                        lastCalibJson = null;
+                    }
+                } catch (Exception e) {
+                    log.warn("[CalibRunService] Could not parse result_calibration.json to check calibration_done: {}", e.getMessage());
+                }
+            }
+            // Walk attemptDir (not the stable runDir) — that's where this run's files
+            // actually live until finalizeAttemptDir() below relocates or deletes them.
+            // URLs are still built using the stable runId, matching where the static
+            // file server / S3 prefix will look them up afterwards.
+            List<String> fileUrls = collectFileUrls(runId, attemptDir, s3Available);
             String imagesJson = new ObjectMapper().writeValueAsString(fileUrls);
 
             String pdfUrl = null;
@@ -353,6 +412,12 @@ public class CalibrationRunService {
                 sensorCoeffUpdater.update(sensor.getId(), resultJson);
             }
 
+            // 9. The DB (just persisted above) and, when available, S3 now hold every
+            //    piece of durable state this run produced (resultJson, conformityJson,
+            //    dccXml, images list, pdfUrl, lastCalibrationJson). The per-attempt
+            //    local directory is pure scratch from this point on.
+            finalizeAttemptDir(attemptDir, runDir, s3Available);
+
             log.info("[CalibRunService] run {} completed with exit={}", runId, result.exitCode());
             return wizardService.toDto(calib);
 
@@ -361,6 +426,10 @@ public class CalibrationRunService {
             calib.setRunStatus("FAILED");
             calib.setRunLog("Exception: " + e.getMessage());
             calibrationRepo.save(calib);
+            // Best-effort cleanup even on failure: nothing in the attempt directory is
+            // more diagnostic than what's already captured in run_log/DB above, so
+            // there is no reason to let it accumulate on disk.
+            finalizeAttemptDir(attemptDir, runDir, false);
             throw new RuntimeException("Calibration run error: " + e.getMessage(), e);
         }
     }
@@ -375,6 +444,75 @@ public class CalibrationRunService {
                     .orElse("calib-" + calib.getId());
         }
         return "calib-" + calib.getId();
+    }
+
+    /**
+     * Disposes of a per-invocation attempt directory once its contents have been
+     * persisted to the DB (and, when available, S3). Only DB + S3 are considered
+     * durable storage for a calibration run's outputs — the local attempt directory
+     * is always scratch:
+     *
+     *   - s3Available == true:  the attempt directory is deleted outright. Nothing
+     *     locally-served needs it — the images/PDF URLs point at S3, and the raw
+     *     JSON/XML contents are already in DB columns.
+     *   - s3Available == false: S3 is down or unavailable in this deployment, so the
+     *     STATIC_BASE local-serving fallback needs *something* to point at. The old
+     *     stable runDir (if any, from a previous successful attempt) is replaced by
+     *     this attempt's contents via delete-then-move, keeping exactly one local
+     *     copy per calibration — never an unbounded pile of per-attempt directories.
+     *
+     * Best-effort throughout: failures are logged, never thrown, since this runs
+     * after the calibration's result has already been committed to the DB.
+     */
+    private void finalizeAttemptDir(Path attemptDir, Path runDir, boolean s3Available) {
+        try {
+            if (s3Available) {
+                deleteRecursively(attemptDir);
+            } else {
+                deleteRecursively(runDir);
+                Files.createDirectories(runDir.getParent());
+                Files.move(attemptDir, runDir, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
+            log.warn("[CalibRunService] Could not finalize attempt directory {} (s3Available={}): {}",
+                    attemptDir, s3Available, e.getMessage());
+        }
+    }
+
+    /** Recursively deletes a directory tree if it exists. Best-effort per file. */
+    private void deleteRecursively(Path dir) {
+        if (!Files.exists(dir)) return;
+        try (var walk = Files.walk(dir)) {
+            walk.sorted(Comparator.reverseOrder())
+                .forEach(p -> { try { Files.delete(p); } catch (Exception ignored) {} });
+        } catch (IOException ignored) {
+        }
+    }
+
+    /**
+     * Resolves the procedure that will actually be used for this run: the user's
+     * --procedure override if set, otherwise the sensor JSON's own declared
+     * calibration.type (mirrors the orchestrator's fallback in analisi_calib_data.py).
+     * Returns null if neither is available — callers must treat that as "unknown"
+     * and skip procedure-based filtering rather than reject everything.
+     */
+    private String resolveEffectiveProcedure(CalibrationRunConfig config) {
+        if (config.getProcedure() != null && !config.getProcedure().isBlank()) {
+            return config.getProcedure().trim().toLowerCase();
+        }
+        try {
+            Path modelsDir = resolveModelsDir();
+            Path sensorPath = modelsDir.resolve("sensors").resolve(
+                    config.getSensorJson() != null ? config.getSensorJson() : "ntc_temperature.json");
+            if (!Files.exists(sensorPath)) return null;
+            var mapper = new ObjectMapper();
+            var sensorNode = mapper.readTree(sensorPath.toFile());
+            var typeNode = sensorNode.at("/calibration/type");
+            return typeNode.isMissingNode() ? null : typeNode.asText(null);
+        } catch (Exception e) {
+            log.warn("[CalibRunService] Could not resolve effective procedure from sensor JSON: {}", e.getMessage());
+            return null;
+        }
     }
 
     /** Resolves the calibration script path (from config or auto-detect). */
